@@ -4,6 +4,7 @@ from .edge import Edge
 from .hook import Hook
 from .mcp_manager import MCPManager
 from .mcp_server import create_mcp_server
+from .memory import MemoryProvider, MemoryQuery, MemoryRecord, NoopMemoryProvider
 from .nodes import Node, Tool
 from .types import CompletionCreateParams, MessagesState, MCPServer
 
@@ -15,7 +16,11 @@ __all__ = [
     "MCPManager",
     "MCPServer",
     "MessagesState",
+    "MemoryProvider",
+    "MemoryQuery",
+    "MemoryRecord",
     "Node",
+    "NoopMemoryProvider",
     "Tool",
     "create_mcp_server",
     "settings",

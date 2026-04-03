@@ -28,6 +28,7 @@ from ._settings import settings
 from .edge import Edge
 from .hook import Hook, HookType
 from .mcp_manager import MCPManager, result_to_message
+from .memory import MemoryProvider
 from .nodes import Node, Tool
 from .types import CompletionCreateParams, MCPServer, MessagesState
 from .utils import completion_to_message
@@ -59,6 +60,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         default_factory=lambda: defaultdict(lambda: False)
     )
     _mcp_manager: MCPManager = PrivateAttr(default_factory=MCPManager)
+    _memory_provider: MemoryProvider | None = PrivateAttr(default=None)
 
     @property
     def agents(self) -> dict[str, "Agent"]:
@@ -148,6 +150,42 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
     def _share_runtime_with_child(self, child: "Agent") -> None:
         """执行前向子智能体共享 runtime state"""
         child._mcp_manager = self._mcp_manager
+        child._memory_provider = self._memory_provider
+
+    def with_memory(self, provider: MemoryProvider | None) -> "Agent":
+        """挂载 Memory Provider"""
+        self._memory_provider = provider
+        return self
+
+    async def _load_memory_context(
+        self,
+        messages: list[ChatCompletionMessageParam],
+        context: dict[str, Any],
+    ) -> None:
+        """执行前合并 Memory Context 至当前运行流程"""
+        if self._memory_provider is None:
+            return
+        loaded = await self._memory_provider.load_context(
+            agent_name=self.name,
+            messages=messages,
+            context=context,
+        )
+        if loaded:
+            context |= loaded
+
+    async def _save_memory(
+        self,
+        messages: list[ChatCompletionMessageParam],
+        context: dict[str, Any],
+    ) -> None:
+        """执行结束后持久化 Memory"""
+        if self._memory_provider is None:
+            return
+        await self._memory_provider.save(
+            agent_name=self.name,
+            messages=messages,
+            context=context,
+        )
 
     async def __call__(
         self,
@@ -170,6 +208,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         init_len = len(messages)
         if context is None:
             context = {}
+        await self._load_memory_context(messages, context)
         self._visited.clear()
         self._cleanup_runtime_tools()
         await self._execute_hooks("on_start", messages, context)
@@ -227,6 +266,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
                     self._visited[target.name] = True
                     pending_sources.add(target.name)
             await self._execute_hooks("on_end", messages, context)
+            await self._save_memory(messages, context)
             return {"messages": messages[init_len:]}
         finally:
             self._cleanup_runtime_tools()
@@ -248,11 +288,13 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         params["stream"] = True
         if context is None:
             context = {}
+        await self._load_memory_context(params["messages"], context)
         self._visited.clear()
         self._cleanup_runtime_tools()
         try:
             async for event in self._stream_graph(params=params, context=context):
                 yield event
+            await self._save_memory(params["messages"], context)
             yield {"type": "done", "agent": self.name}
         finally:
             self._cleanup_runtime_tools()
