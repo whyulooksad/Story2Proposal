@@ -1,0 +1,20 @@
+{
+  "name": "play_music",
+  "domain": "desktop",
+  "description": "Play a requested song in a desktop music application.",
+  "visibleMcpServers": [
+    "windows_env",
+    "desktop_gui"
+  ],
+  "metadata": {
+    "required_tools": [
+      "find_app_executable_tool",
+      "launch_app",
+      "list_windows",
+      "focus_window",
+      "get_accessibility_tree",
+      "type_text",
+      "click_control"
+    ]
+  }
+}

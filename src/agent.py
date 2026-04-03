@@ -8,6 +8,7 @@ import warnings
 from collections.abc import AsyncGenerator
 from collections import defaultdict
 from copy import deepcopy
+from pathlib import Path
 from typing import Annotated, Any, Iterable, get_args, cast
 
 from cel import evaluate
@@ -30,6 +31,7 @@ from .hook import Hook, HookType
 from .mcp_manager import MCPManager, result_to_message
 from .memory import MemoryProvider
 from .nodes import Node, Tool
+from .skill import Skill, SkillCatalog, SkillLoader
 from .types import CompletionCreateParams, MCPServer, MessagesState
 from .utils import completion_to_message
 
@@ -61,6 +63,10 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
     )
     _mcp_manager: MCPManager = PrivateAttr(default_factory=MCPManager)
     _memory_provider: MemoryProvider | None = PrivateAttr(default=None)
+    _active_skill: Skill | None = PrivateAttr(default=None)
+    _skill_loader: SkillLoader | None = PrivateAttr(default=None)
+    _skill_catalog: SkillCatalog | None = PrivateAttr(default=None)
+    _skill_agent_name: str | None = PrivateAttr(default=None)
 
     @property
     def agents(self) -> dict[str, "Agent"]:
@@ -151,11 +157,116 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         """执行前向子智能体共享 runtime state"""
         child._mcp_manager = self._mcp_manager
         child._memory_provider = self._memory_provider
+        child._skill_loader = self._skill_loader
+        child._skill_catalog = self._skill_catalog
+        child._skill_agent_name = self._skill_agent_name
+        if child._active_skill is None and self._active_skill is not None:
+            child._active_skill = self._active_skill.for_child()
 
     def with_memory(self, provider: MemoryProvider | None) -> "Agent":
         """挂载 Memory Provider"""
         self._memory_provider = provider
         return self
+
+    def with_skill(self, skill: Skill | None) -> "Agent":
+        """为当前智能体激活任务级 Skill"""
+        self._active_skill = skill
+        return self
+
+    def with_skill_loader(
+        self,
+        loader: SkillLoader,
+        *,
+        agent_name: str | None = None,
+    ) -> "Agent":
+        """Attach one agent-scoped skill catalog."""
+        resolved_agent_name = agent_name or self.name
+        self._skill_loader = loader
+        self._skill_agent_name = resolved_agent_name
+        self._skill_catalog = loader.load_catalog(resolved_agent_name)
+        return self
+
+    def with_skills(
+        self,
+        base_dir: str | Path,
+        *,
+        agent_name: str | None = None,
+    ) -> "Agent":
+        """Attach skills from one filesystem directory."""
+        return self.with_skill_loader(
+            SkillLoader(base_dir),
+            agent_name=agent_name,
+        )
+
+    def _skill_catalog_text(self) -> str | None:
+        """Return the skill catalog prompt shown before skill activation."""
+        if self._skill_catalog is None or self._active_skill is not None:
+            return None
+        lines = [
+            "Skill catalog:",
+            "Choose a skill first if the user goal matches one of the following skills.",
+            "Do not call MCP tools before activating a skill.",
+        ]
+        if self._skill_catalog.overview.strip():
+            lines.append(self._skill_catalog.overview.strip())
+        for skill in self._skill_catalog.skills:
+            line = f"- {skill.name}: {skill.purpose}"
+            if skill.description:
+                line += f" {skill.description}"
+            lines.append(line)
+        return "\n".join(lines)
+
+    def _activate_skill_tool(self) -> ChatCompletionFunctionToolParam | None:
+        """Return the builtin tool used to activate one skill."""
+        if self._skill_catalog is None:
+            return None
+        return {
+            "type": "function",
+            "function": {
+                "name": "activate_skill",
+                "description": (
+                    "Activate one skill from the current skill catalog "
+                    "before making MCP tool calls."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "skill_name": {
+                            "type": "string",
+                            "description": "Exact skill name from the catalog.",
+                            "enum": self._skill_catalog.skill_names,
+                        }
+                    },
+                    "required": ["skill_name"],
+                    "additionalProperties": False,
+                },
+            },
+        }
+
+    def _effective_mcp_servers(self) -> dict[str, MCPServer]:
+        """返回当前运行可见的 MCP 服务器"""
+        return (settings.mcp_servers if settings is not None else {}) | self.mcp_servers
+
+    def _can_current_turn_see_mcp_tools(self) -> bool:
+        """Return whether MCP tools should be visible in this turn."""
+        if self._skill_catalog is None:
+            return True
+        return self._active_skill is not None
+
+    def _is_tool_visible_for_skill(self, tool_name: str) -> bool:
+        """Check whether an MCP tool is visible under the active skill."""
+        if not self._can_current_turn_see_mcp_tools():
+            return False
+        if self._active_skill is None:
+            return True
+        if self._active_skill.tool_names:
+            return tool_name in set(self._active_skill.tool_names)
+        if self._active_skill.visible_mcp_servers:
+            parts = tool_name.split("__", maxsplit=2)
+            if len(parts) < 3:
+                return False
+            return parts[1] in set(self._active_skill.visible_mcp_servers)
+        return True
 
     async def _load_memory_context(
         self,
@@ -194,9 +305,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         context: dict[str, Any] | None = None,
     ) -> MessagesState:
         """运行 Agent"""
-        for name, server_params in (
-            (settings.mcp_servers if settings is not None else {}) | self.mcp_servers
-        ).items():
+        for name, server_params in self._effective_mcp_servers().items():
             await self._mcp_manager.add_server(name, server_params)
         if params is None:
             params = {"messages": []}
@@ -229,7 +338,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
             messages.append(message)
 
             if (tool_calls := messages[-1].get("tool_calls")) is not None:
-                self._register_tool_calls(tool_calls, messages)
+                messages.extend(self._register_tool_calls(tool_calls, messages))
             self._visited[self.name] = True
             pending_sources: set[str] = {self.name}
             while pending_sources:
@@ -278,9 +387,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         context: dict[str, Any] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """以真实流式事件的方式运行 Agent"""
-        for name, server_params in (
-            (settings.mcp_servers if settings is not None else {}) | self.mcp_servers
-        ).items():
+        for name, server_params in self._effective_mcp_servers().items():
             await self._mcp_manager.add_server(name, server_params)
         if params is None:
             params = {"messages": []}
@@ -330,7 +437,15 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
             }
 
             if (tool_calls := assistant_message.get("tool_calls")) is not None:
-                self._register_tool_calls(tool_calls, messages)
+                generated_tool_messages = self._register_tool_calls(tool_calls, messages)
+                messages.extend(generated_tool_messages)
+                for tool_message in generated_tool_messages:
+                    yield {
+                        "type": "tool_result",
+                        "agent": self.name,
+                        "tool_name": "activate_skill",
+                        "message": tool_message,
+                    }
             self._visited[self.name] = True
             pending_sources: set[str] = {self.name}
             while pending_sources:
@@ -419,7 +534,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
 
     def _builtin_tools(self) -> list[ChatCompletionFunctionToolParam]:
         """返回当前 Agent 默认可见的 graph 管理工具"""
-        return [
+        tools = [
             *[
                 agent.as_call_tool()
                 for agent in [self, *self.nodes]
@@ -428,6 +543,9 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
             Agent.as_init_tool(),
             Edge.as_tool(),
         ]
+        if (activate_tool := self._activate_skill_tool()) is not None:
+            tools.append(activate_tool)
+        return tools
 
     def _visible_tools(self) -> list[ChatCompletionFunctionToolParam]:
         """返回当前轮次模型可见的全部工具"""
@@ -437,11 +555,17 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
             for hook_type in get_args(HookType)
             if getattr(hook, hook_type, None) is not None
         ]
-        return [
+        visible_mcp_tools = [
             tool
             for tool in self._mcp_manager.tools
             if tool["function"]["name"] not in hook_names
-        ] + self._builtin_tools()
+        ]
+        visible_mcp_tools = [
+            tool
+            for tool in visible_mcp_tools
+            if self._is_tool_visible_for_skill(tool["function"]["name"])
+        ]
+        return visible_mcp_tools + self._builtin_tools()
 
     async def _execute_hooks(
         self,
@@ -499,6 +623,15 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
                 await Template(self.instructions, enable_async=True).render_async(
                     context or {}
                 )
+            )
+        if (skill_catalog_text := self._skill_catalog_text()) is not None:
+            parts.append(skill_catalog_text)
+        if self._active_skill is not None and self._active_skill.instructions is not None:
+            parts.append(
+                "Active skill instructions:\n"
+                + await Template(
+                    self._active_skill.instructions, enable_async=True
+                ).render_async(context or {})
             )
         if len(agent_md_content := settings.get_agents_md_content()) > 0:
             parts.append(
@@ -679,17 +812,51 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
             "request_id": request_id,
         }
 
+    def _activate_skill_from_call(
+        self,
+        tool_call: ChatCompletionMessageToolCallUnionParam,
+    ) -> ChatCompletionMessageParam:
+        """Activate one skill and return a synthetic tool result message."""
+        arguments = json.loads(tool_call["function"]["arguments"])
+        skill_name = arguments["skill_name"]
+        self.edges.add(Edge(source=self.name, target=self.name))
+        if self._skill_loader is None or self._skill_agent_name is None:
+            return {
+                "role": "tool",
+                "tool_call_id": tool_call["id"],
+                "content": "Skill loader is not configured for this agent.",
+            }
+        try:
+            self._active_skill = self._skill_loader.load(
+                skill_name=skill_name,
+                agent_name=self._skill_agent_name,
+            )
+        except Exception as exc:
+            return {
+                "role": "tool",
+                "tool_call_id": tool_call["id"],
+                "content": f"Failed to activate skill `{skill_name}`: {exc}",
+            }
+        return {
+            "role": "tool",
+            "tool_call_id": tool_call["id"],
+            "content": f"Skill `{skill_name}` activated.",
+        }
+
     def _register_tool_calls(
         self,
         tool_calls: Iterable[ChatCompletionMessageToolCallUnionParam],
         messages: list[ChatCompletionMessageParam],
-    ) -> None:
+    ) -> list[ChatCompletionMessageParam]:
         """把 assistant 返回的 tool_calls 注册成 graph 中的 node 和 edge"""
+        generated_messages: list[ChatCompletionMessageParam] = []
         for tool_call in tool_calls:
             if tool_call["type"] == "custom":
                 continue
             name = tool_call["function"]["name"]
             match name:
+                case "activate_skill":
+                    generated_messages.append(self._activate_skill_from_call(tool_call))
                 case "create_agent":
                     payload = json.loads(tool_call["function"]["arguments"])
                     payload["model"] = self.model
@@ -719,6 +886,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
                     self.nodes.add(tool_node)
                     self.edges.add(Edge(source=self.name, target=tool_node.name))
                     self.edges.add(Edge(source=tool_node.name, target=self.name))
+        return generated_messages
 
     def _tool_call_completed(
         self,

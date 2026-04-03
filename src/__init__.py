@@ -6,6 +6,7 @@ from .mcp_manager import MCPManager
 from .mcp_server import create_mcp_server
 from .memory import MemoryProvider, MemoryQuery, MemoryRecord, NoopMemoryProvider
 from .nodes import Node, Tool
+from .skill import Skill, SkillCatalog, SkillLoader, SkillManifest
 from .types import CompletionCreateParams, MessagesState, MCPServer
 
 __all__ = [
@@ -22,6 +23,10 @@ __all__ = [
     "Node",
     "NoopMemoryProvider",
     "Tool",
+    "Skill",
+    "SkillCatalog",
+    "SkillLoader",
+    "SkillManifest",
     "create_mcp_server",
     "settings",
 ]
