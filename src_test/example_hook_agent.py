@@ -12,7 +12,7 @@ from src import Agent, Hook
 
 
 async def main() -> None:
-    hook_server_path = ROOT / "test" / "hook_demo_server.py"
+    hook_server_path = ROOT / "src_test" / "hook_demo_server.py"
     context: dict[str, object] = {}
 
     agent = Agent(
