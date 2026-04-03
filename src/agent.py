@@ -5,6 +5,7 @@ import json
 import logging
 import uuid
 import warnings
+from collections.abc import AsyncGenerator
 from collections import defaultdict
 from copy import deepcopy
 from typing import Annotated, Any, Iterable, get_args, cast
@@ -230,6 +231,110 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         finally:
             self._cleanup_runtime_tools()
 
+    async def stream(
+        self,
+        params: CompletionCreateParams | None = None,
+        *,
+        context: dict[str, Any] | None = None,
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """以真实流式事件的方式运行 Agent"""
+        for name, server_params in (
+            (settings.mcp_servers if settings is not None else {}) | self.mcp_servers
+        ).items():
+            await self._mcp_manager.add_server(name, server_params)
+        if params is None:
+            params = {"messages": []}
+        params = deepcopy(params)
+        params["stream"] = True
+        if context is None:
+            context = {}
+        self._visited.clear()
+        self._cleanup_runtime_tools()
+        try:
+            async for event in self._stream_graph(params=params, context=context):
+                yield event
+            yield {"type": "done", "agent": self.name}
+        finally:
+            self._cleanup_runtime_tools()
+
+    async def _stream_graph(
+        self,
+        *,
+        params: CompletionCreateParams,
+        context: dict[str, Any],
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """顺序执行 graph，并逐步产出流式事件"""
+        messages = params["messages"]
+        await self._execute_hooks("on_start", messages, context)
+        try:
+            yield {"type": "agent_start", "agent": self.name}
+            assistant_message: dict[str, Any] | None = None
+            async for event in self._stream_chat_completion(
+                params=params,
+                context=context,
+            ):
+                if event["type"] == "completion_message":
+                    assistant_message = cast(dict[str, Any], event["message"])
+                    continue
+                yield event
+            if assistant_message is None:
+                raise ValueError("Stream completion did not produce a final assistant message")
+
+            messages.append(assistant_message)
+            yield {
+                "type": "message",
+                "agent": self.name,
+                "message": assistant_message,
+            }
+
+            if (tool_calls := assistant_message.get("tool_calls")) is not None:
+                self._register_tool_calls(tool_calls, messages)
+            self._visited[self.name] = True
+            pending_sources: set[str] = {self.name}
+            while pending_sources:
+                targets: dict[str, Node] = {}
+                for edge in self.edges:
+                    if not self._edge_triggers(edge, pending_sources):
+                        continue
+                    resolved = await self._resolve_edge_target(edge.target, context)
+                    for target in resolved:
+                        targets[target.name] = target
+                if not targets:
+                    break
+
+                pending_sources = set()
+                for target_name in sorted(targets):
+                    target = targets[target_name]
+                    if isinstance(target, Agent):
+                        self._share_runtime_with_child(target)
+                        async for event in target._stream_graph(
+                            params={"messages": messages},
+                            context=context,
+                        ):
+                            yield event
+                    elif isinstance(target, Tool):
+                        result = await self._run_tool_node(
+                            target,
+                            {"messages": messages},
+                            context,
+                        )
+                        tool_message = result["messages"][0]
+                        messages.append(tool_message)
+                        yield {
+                            "type": "tool_result",
+                            "agent": self.name,
+                            "tool_name": target.tool_name or target.name,
+                            "message": tool_message,
+                        }
+                    else:
+                        raise TypeError("Unknown type of Node.")
+                    self._visited[target.name] = True
+                    pending_sources.add(target.name)
+            await self._execute_hooks("on_end", messages, context)
+            yield {"type": "agent_end", "agent": self.name}
+        finally:
+            self._cleanup_runtime_tools()
+
     def _edge_triggers(self, edge: Edge, pending_sources: set[str]) -> bool:
         """检查边是否可触发"""
         if isinstance(edge.source, tuple):
@@ -306,7 +411,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         available_tools: list[ChatCompletionFunctionToolParam] | None = None,
         to_agent: Agent | None = None,
         chunk: ChatCompletionChunk | None = None,
-        completion: ChatCompletion | None = None,
+        completion: Any | None = None,
     ) -> None:
         """执行指定类型的 Hook"""
         for hook in [h for h in self.hooks if getattr(h, hook_type, None) is not None]:
@@ -430,6 +535,107 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         result._request_id = request_id
         await self._execute_hooks("on_llm_end", messages, context, completion=result)
         return result
+
+    async def _stream_chat_completion(
+        self,
+        *,
+        params: CompletionCreateParams,
+        context: dict[str, Any],
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """创建一次真实流式 chat completion，并逐步聚合最终消息。"""
+        request_id = str(uuid.uuid4())
+        parameters = await self._prepare_chat_completion_params(params, context)
+        logger.info(json.dumps(parameters | {"request_id": request_id, "stream": True}))
+        client = self.client or AsyncOpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            base_url=settings.OPENAI_BASE_URL,
+        )
+        messages = params["messages"]
+        await self._execute_hooks(
+            "on_llm_start",
+            messages,
+            context,
+            available_tools=self._visible_tools(),
+        )
+        yield {"type": "llm_start", "agent": self.name, "request_id": request_id}
+
+        stream = await client.chat.completions.create(**parameters)
+        content_parts: list[str] = []
+        tool_calls: dict[int, dict[str, Any]] = {}
+
+        async for chunk in stream:
+            await self._execute_hooks(
+                "on_chunk",
+                messages,
+                context,
+                chunk=chunk,
+            )
+            yield {"type": "chunk", "agent": self.name, "chunk": chunk}
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            delta_content = getattr(delta, "content", None)
+            if delta_content is not None:
+                if isinstance(delta_content, str):
+                    content_parts.append(delta_content)
+                    yield {
+                        "type": "token",
+                        "agent": self.name,
+                        "delta": delta_content,
+                    }
+                elif isinstance(delta_content, list):
+                    for item in delta_content:
+                        text = getattr(item, "text", None)
+                        if text:
+                            content_parts.append(text)
+                            yield {
+                                "type": "token",
+                                "agent": self.name,
+                                "delta": text,
+                            }
+            for delta_tool_call in getattr(delta, "tool_calls", None) or []:
+                index = getattr(delta_tool_call, "index", 0)
+                aggregated = tool_calls.setdefault(
+                    index,
+                    {
+                        "type": "function",
+                        "id": "",
+                        "function": {"name": "", "arguments": ""},
+                    },
+                )
+                if getattr(delta_tool_call, "id", None):
+                    aggregated["id"] = delta_tool_call.id
+                function = getattr(delta_tool_call, "function", None)
+                if function is not None:
+                    if getattr(function, "name", None):
+                        aggregated["function"]["name"] += function.name
+                    if getattr(function, "arguments", None):
+                        aggregated["function"]["arguments"] += function.arguments
+
+        message: dict[str, Any] = {"role": "assistant", "name": self.name}
+        content = "".join(content_parts).strip()
+        if content:
+            message["content"] = content
+        if tool_calls:
+            message["tool_calls"] = [tool_calls[index] for index in sorted(tool_calls)]
+
+        completion_payload = {
+            "id": request_id,
+            "object": "chat.completion.stream.final",
+            "message": message,
+        }
+        await self._execute_hooks(
+            "on_llm_end",
+            messages,
+            context,
+            completion=completion_payload,
+        )
+        yield {
+            "type": "completion_message",
+            "agent": self.name,
+            "message": message,
+            "request_id": request_id,
+        }
 
     def _register_tool_calls(
         self,
