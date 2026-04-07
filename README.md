@@ -57,7 +57,7 @@ Edge(source=("planner", "researcher"), target="writer")
 
 ### 3. `Tool`
 
-`Tool` 不是手写 Python 函数工具，而是 MCP tool 的运行时节点表示。通常由框架自动创建，你一般不直接 new 它。
+`Tool` 是 MCP tool 的运行时节点表示。
 
 MCP tool 会以这种名字暴露给模型：
 
@@ -155,7 +155,7 @@ result = await agent(
 
 ### 3. 给 Agent 传 `context`
 
-`instructions` 支持 Jinja2 模板，所以你可以把外部上下文传进去：
+`instructions` 支持 Jinja2 模板，所以可以把外部上下文传进去：
 
 ```python
 result = await agent(
@@ -230,7 +230,7 @@ root = Agent(
 - 动态追加边
 - 直接 handoff 给已有 Agent
 
-你不需要手动注册这些工具。
+不需要手动注册这些工具。
 
 ### 6. 接 MCP server
 
@@ -481,7 +481,7 @@ if __name__ == "__main__":
 
 ## 对外暴露为 MCP server
 
-你也可以把整个 Agent 图暴露成 MCP server：
+也可以把整个 Agent 图暴露成 MCP server：
 
 ```python
 from src import Agent, create_mcp_server
