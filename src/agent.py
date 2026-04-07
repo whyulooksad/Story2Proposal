@@ -846,7 +846,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         self,
         tool_call: ChatCompletionMessageToolCallUnionParam,
     ) -> ChatCompletionMessageParam:
-        """Activate one skill and return a synthetic tool result message."""
+        """激活指定 skill，并生成工具调用的模拟返回消息"""
         arguments = json.loads(tool_call["function"]["arguments"])
         skill_name = arguments["skill_name"]
         self.edges.add(Edge(source=self.name, target=self.name))
