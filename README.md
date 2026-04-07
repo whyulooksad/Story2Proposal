@@ -2,30 +2,6 @@
 
 一个轻量的、图驱动的 Agent 框架。它不是“LLM + 顺序工具循环”，而是把 `Agent`、`Tool`、`Edge` 都当成图里的节点和边，在一次运行里动态创建子 Agent、追加边、执行 MCP 工具，并沿着图继续调度。
 
-## 用 uv 管理环境
-
-项目现在已经补了 `pyproject.toml`，可以直接用 `uv` 管理虚拟环境和依赖。
-
-```bash
-uv sync
-```
-
-这会根据 `pyproject.toml` 创建 `.venv` 并安装依赖。
-
-常用命令：
-
-```bash
-uv run python gui_agent.py
-uv run python src_test/example_basic_agent.py
-uv run python src_test/example_stream_agent.py
-```
-
-如果你想新增依赖：
-
-```bash
-uv add <package>
-```
-
 ## 这个框架能做什么								
 
 - 运行单个 Agent，对话、调用工具、返回消息结果
