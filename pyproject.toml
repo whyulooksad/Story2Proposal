@@ -19,3 +19,6 @@ dependencies = [
     "pydantic-settings>=2.11.0",
     "Pygments>=2.19.2",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src", "story2proposal"]

@@ -1,0 +1,106 @@
+{
+  "story_id": "adaptive_graph_writer",
+  "title_hint": "Story2Proposal-Style Structured Writing with a Graph Runtime",
+  "topic": "structured scientific paper generation with graph-based agents",
+  "problem_statement": "Large language models can draft papers, but unconstrained multi-agent writing often drifts across sections, loses evidence alignment, and mishandles figures and citations.",
+  "motivation": "Researchers need a scaffold that writes papers in a structured way while preserving explicit section-level obligations and revision loops.",
+  "core_idea": "Use a graph-driven agent runtime with a shared manuscript contract so that architect, writer, evaluators, refiner, and renderer coordinate through explicit section constraints instead of free-form generation.",
+  "method_summary": "The system starts from a structured research story, builds a manuscript blueprint, initializes a persistent contract, writes sections sequentially, evaluates each section along reasoning, structure, and visual dimensions, applies contract-aware revisions, and finally renders markdown and LaTeX outputs.",
+  "contributions": [
+    "A contract-centered pipeline for structured scientific writing",
+    "A graph runtime that supports explicit routing and section-level revision loops",
+    "A reproducible scaffold that preserves figure and citation obligations during drafting"
+  ],
+  "experiments": [
+    {
+      "experiment_id": "exp_alignment",
+      "name": "Claim-evidence alignment study",
+      "setup": "Compare unconstrained long-form generation against contract-centered drafting on the same set of structured stories.",
+      "dataset": "5 manually curated research stories",
+      "metrics": [
+        "section coverage",
+        "claim-evidence alignment",
+        "visual reference completeness"
+      ],
+      "result_summary": "The contract-centered pipeline improves section coverage and reduces unsupported claims."
+    },
+    {
+      "experiment_id": "exp_revision",
+      "name": "Revision loop ablation",
+      "setup": "Remove evaluator-driven rewrite cycles and measure structural consistency regressions.",
+      "dataset": "same 5 research stories",
+      "metrics": [
+        "first-pass approval rate",
+        "revision count",
+        "final validator warnings"
+      ],
+      "result_summary": "Evaluator-driven rewrite cycles reduce downstream rendering warnings and improve consistency."
+    }
+  ],
+  "baselines": [
+    "single-agent direct long-form generation",
+    "multi-agent writing without a persistent contract"
+  ],
+  "findings": [
+    "Persistent structured contracts make section outputs easier to validate and refine.",
+    "Sequential section writing is more stable than fully parallel drafting in the MVP setting.",
+    "Explicit visual placeholders reduce figure-reference mismatches during rendering."
+  ],
+  "limitations": [
+    "The MVP uses placeholder figures instead of true figure synthesis.",
+    "Reference handling is based on seeded bibliography entries rather than live retrieval."
+  ],
+  "references": [
+    {
+      "reference_id": "ref_story2proposal",
+      "title": "Story2Proposal: A Scaffold for Structured Scientific Paper Writing",
+      "authors": [
+        "Anonymous"
+      ],
+      "year": 2025,
+      "venue": "arXiv",
+      "notes": "Target paper to reproduce."
+    },
+    {
+      "reference_id": "ref_graph_runtime",
+      "title": "Graph-Oriented Agent Execution for Tool-Integrated Workflows",
+      "authors": [
+        "Example Author"
+      ],
+      "year": 2024,
+      "venue": "Workshop on Agent Systems"
+    }
+  ],
+  "assets": [
+    {
+      "artifact_id": "fig_pipeline_overview",
+      "kind": "figure",
+      "title": "Pipeline overview",
+      "description": "Overview of architect, writer, evaluators, refiner, and renderer linked by the contract.",
+      "target_sections": [
+        "method",
+        "introduction"
+      ]
+    },
+    {
+      "artifact_id": "tab_ablation_results",
+      "kind": "table",
+      "title": "Ablation results",
+      "description": "Comparison of revision loop variants on coverage and warning metrics.",
+      "target_sections": [
+        "results_discussion",
+        "experiments"
+      ]
+    }
+  ],
+  "metadata": {
+    "target_venue": "arXiv",
+    "language": "en",
+    "active_sections": [
+      "title",
+      "abstract",
+      "introduction",
+      "method"
+    ]
+  }
+}

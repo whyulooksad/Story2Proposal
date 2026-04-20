@@ -184,6 +184,14 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         self._skill_catalog = loader.load_catalog(resolved_agent_name)
         return self
 
+    async def _prepare_runtime(self) -> None:
+        """执行入口统一准备 runtime 共享与 MCP server 连接"""
+        for child in self.agents.values():
+            if child is not self:
+                self._share_runtime_with_child(child)
+        for name, server_params in self._effective_mcp_servers().items():
+            await self._mcp_manager.add_server(name, server_params)
+
     def _skill_catalog_text(self) -> str | None:
         """返回 skill 激活前展示的 skill catalog 提示词"""
         if self._skill_catalog is None or self._active_skill is not None:
@@ -291,8 +299,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         context: dict[str, Any] | None = None,
     ) -> MessagesState:
         """运行 Agent"""
-        for name, server_params in self._effective_mcp_servers().items():
-            await self._mcp_manager.add_server(name, server_params)
+        await self._prepare_runtime()
         if params is None:
             params = {"messages": []}
         stream = params.get("stream", False)
@@ -372,8 +379,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
         context: dict[str, Any] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """以真实流式事件的方式运行 Agent"""
-        for name, server_params in self._effective_mcp_servers().items():
-            await self._mcp_manager.add_server(name, server_params)
+        await self._prepare_runtime()
         if params is None:
             params = {"messages": []}
         params = deepcopy(params)
@@ -448,6 +454,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
                 for target_name in sorted(targets):
                     target = targets[target_name]
                     if isinstance(target, Agent):
+                        await target._prepare_runtime()
                         await self._execute_hooks(
                             "on_handoff",
                             messages,
@@ -978,7 +985,10 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
             pass
 
         try:
-            result = await self._mcp_manager.call_tool(target, context or {})
+            result = await self._mcp_manager.call_tool(
+                target,
+                {"context": context or {}},
+            )
             if result.structuredContent is not None:
                 resolved = result.structuredContent.get("result")
                 if isinstance(resolved, list) and all(
@@ -995,7 +1005,7 @@ class Agent(Node[CompletionCreateParams, MessagesState]):
                     "Conditional edge should return one text content block only"
                 )
             return {self._get_node_by_name(result.content[0].text)}
-        except KeyError:
+        except (KeyError, ValueError):
             pass
 
         try:

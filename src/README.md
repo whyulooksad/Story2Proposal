@@ -478,6 +478,7 @@ if __name__ == "__main__":
 - `name` 必须全图唯一，否则会报错
 - `Hook` 配的是 `MCP tool` 名，不是 `Python` 函数
 - `skill catalog` 已挂载但未激活时，`MCP tool` 默认不可见
+- `Edge.target` 可以是节点名、MCP tool 名，或者对 `context` 求值的 CEL 表达式
 
 ## 对外暴露为 MCP server
 
