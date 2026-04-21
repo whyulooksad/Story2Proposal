@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "agent-graph-framework"
 version = "0.1.0"
 description = "A lightweight graph-driven agent framework with MCP integration."
-readme = "README.md"
+readme = "src/README.md"
 requires-python = ">=3.12"
 dependencies = [
     "common-expression-language>=0.3.1",
@@ -21,4 +21,16 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src", "story2proposal"]
+only-include = [
+    "src",
+    "schemas",
+    "domain",
+    "graph",
+    "servers",
+    "scripts",
+    "config.py",
+    "llm_io.py",
+    "runner.py",
+    "prompts",
+    "data/stories",
+]

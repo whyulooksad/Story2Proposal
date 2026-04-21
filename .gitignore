@@ -13,7 +13,6 @@ __pycache__/
 *.pyo
 .pytest_cache/
 .venv/
-story2proposal/data/outputs/
+data/outputs/
 idea.md
 Story2Proposal A Scaffold for Structured Scientific Paper Writing.pdf
-

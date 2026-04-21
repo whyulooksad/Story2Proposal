@@ -4,17 +4,11 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from story2proposal.llm_io import parse_model
-from story2proposal.schemas import (
-    EvaluationFeedback,
-    ManuscriptBlueprint,
-    RefinerOutput,
-    ResearchStory,
-    SectionDraft,
-)
-from story2proposal.workflow.context_ops import (
+from domain import (
+    append_review,
     apply_review_cycle as apply_review_cycle_impl,
     initialize_contract,
+    persist_run_state,
     refresh_prompt_views,
     render_markdown_manuscript,
     save_section_draft,
@@ -22,7 +16,14 @@ from story2proposal.workflow.context_ops import (
     store_refiner_output,
     store_render_output,
     trim_blueprint_to_sections,
-    append_review,
+)
+from llm_io import parse_model
+from schemas import (
+    EvaluationFeedback,
+    ManuscriptBlueprint,
+    RefinerOutput,
+    ResearchStory,
+    SectionDraft,
 )
 
 server = FastMCP("s2p_workflow")
@@ -43,16 +44,36 @@ def _latest_agent_message(
     raise ValueError(f"No assistant message found for agent {agent_name!r}")
 
 
+def _agent_name(agent: dict[str, Any] | None) -> str | None:
+    return (agent or {}).get("name")
+
+
+def _parse_agent_output(
+    messages: list[dict[str, Any]],
+    agent: dict[str, Any] | None,
+    schema: type[Any],
+) -> Any:
+    return parse_model(_latest_agent_message(messages, _agent_name(agent)), schema)
+
+
+def _store_feedback(
+    context: dict[str, Any],
+    evaluator_type: str,
+    feedback: EvaluationFeedback,
+) -> dict[str, Any]:
+    if feedback.evaluator_type != evaluator_type:
+        feedback.evaluator_type = evaluator_type
+    append_review(context, feedback)
+    return context
+
+
 @server.tool()
 async def capture_architect_output(
     messages: list[dict[str, Any]],
     context: dict[str, Any],
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    blueprint = parse_model(
-        _latest_agent_message(messages, (agent or {}).get("name")),
-        ManuscriptBlueprint,
-    )
+    blueprint = _parse_agent_output(messages, agent, ManuscriptBlueprint)
     story = ResearchStory.model_validate(context["story"])
     active_sections = story.metadata.get("active_sections")
     if isinstance(active_sections, list) and active_sections:
@@ -71,10 +92,7 @@ async def capture_section_writer_output(
     context: dict[str, Any],
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    draft = parse_model(
-        _latest_agent_message(messages, (agent or {}).get("name")),
-        SectionDraft,
-    )
+    draft = _parse_agent_output(messages, agent, SectionDraft)
     save_section_draft(context, draft)
     return context
 
@@ -85,14 +103,8 @@ def _capture_feedback(
     context: dict[str, Any],
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    feedback = parse_model(
-        _latest_agent_message(messages, (agent or {}).get("name")),
-        EvaluationFeedback,
-    )
-    if feedback.evaluator_type != evaluator_type:
-        feedback.evaluator_type = evaluator_type
-    append_review(context, feedback)
-    return context
+    feedback = _parse_agent_output(messages, agent, EvaluationFeedback)
+    return _store_feedback(context, evaluator_type, feedback)
 
 
 @server.tool()
@@ -130,50 +142,9 @@ async def apply_review_cycle(
 ) -> dict[str, Any]:
     del messages, agent
     apply_review_cycle_impl(context)
+    refresh_prompt_views(context)
+    persist_run_state(context)
     return context
-
-
-@server.tool()
-async def route_after_architect(
-    run_id: str | None = None,
-    story: dict[str, Any] | None = None,
-    blueprint: dict[str, Any] | None = None,
-    contract: dict[str, Any] | None = None,
-    drafts: dict[str, Any] | None = None,
-    reviews: dict[str, Any] | None = None,
-    artifacts: dict[str, Any] | None = None,
-    runtime: dict[str, Any] | None = None,
-) -> dict[str, str]:
-    refresh_prompt_views(
-        {
-            "run_id": run_id,
-            "story": story,
-            "blueprint": blueprint,
-            "contract": contract,
-            "drafts": drafts or {},
-            "reviews": reviews or {},
-            "artifacts": artifacts or {},
-            "runtime": runtime or {},
-        }
-    )
-    return {"result": "section_writer"}
-
-
-@server.tool()
-async def route_after_review_cycle(
-    run_id: str | None = None,
-    story: dict[str, Any] | None = None,
-    blueprint: dict[str, Any] | None = None,
-    contract: dict[str, Any] | None = None,
-    drafts: dict[str, Any] | None = None,
-    reviews: dict[str, Any] | None = None,
-    artifacts: dict[str, Any] | None = None,
-    runtime: dict[str, Any] | None = None,
-) -> dict[str, str]:
-    del run_id, story, blueprint, contract, drafts, reviews, artifacts
-    if (runtime or {}).get("current_section_id") is None:
-        return {"result": "refiner"}
-    return {"result": "section_writer"}
 
 
 @server.tool()
@@ -182,10 +153,7 @@ async def capture_refiner_output(
     context: dict[str, Any],
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    output = parse_model(
-        _latest_agent_message(messages, (agent or {}).get("name")),
-        RefinerOutput,
-    )
+    output = _parse_agent_output(messages, agent, RefinerOutput)
     store_refiner_output(context, output)
     return context
 

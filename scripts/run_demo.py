@@ -4,9 +4,9 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from story2proposal.config import STORIES_DIR
-from story2proposal.schemas import ResearchStory
-from story2proposal.workflow.run_pipeline import run_story_to_proposal
+from config import STORIES_DIR
+from runner import run_story_to_proposal
+from schemas import ResearchStory
 
 
 async def main() -> None:
