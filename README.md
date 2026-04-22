@@ -23,7 +23,7 @@ Story2Proposal Agent 是一个面向**结构化科研论文 scaffold 生成**的
 
 如果你想看底层 runtime 的设计、能力边界和 API，请直接看：
 
-- [src/README.md](/src/README.md:1)
+- [src/README.md](/src/README.md)
 
 本文档只介绍 Story2Proposal Agent 的应用层。
 
