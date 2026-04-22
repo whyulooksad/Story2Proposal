@@ -1,6 +1,6 @@
 # Story2Proposal Agent
 
-## 一、项目简介
+# 一、项目简介
 
 **Story2Proposal Agent** 是我在科研写作这个方向上做的一个多 Agent 应用。
 
@@ -187,3 +187,4 @@ uv sync
 ## 六、 License
 
 本项目基于 [MIT License](https://github.com/whyulooksad/ReportAgent/blob/main/LICENSE) 开源。
+

@@ -18,3 +18,9 @@ idea.md
 Story2Proposal A Scaffold for Structured Scientific Paper Writing.pdf
 introduce.md
 story_io.md
+frontend/DESIGN.md
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
