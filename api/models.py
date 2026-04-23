@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from config import DEFAULT_MODEL
 from schemas import ResearchStory
 
 
@@ -17,7 +18,7 @@ class RunCreateRequest(BaseModel):
     # 前端直接提交一份完整的 `ResearchStory`。
     story: ResearchStory
     # 当前版本整条图共享同一个 model 配置。
-    model: str = "qwen-plus"
+    model: str = DEFAULT_MODEL
 
 
 class RunArtifactResponse(BaseModel):

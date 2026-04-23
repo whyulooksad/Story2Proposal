@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from config import OUTPUTS_DIR
+from config import DEFAULT_MODEL, OUTPUTS_DIR
 from domain import build_initial_context, persist_run_outputs
 from graph import build_story2proposal_graph
 from schemas import ResearchStory
@@ -21,7 +21,7 @@ async def run_story_to_proposal(
     story: ResearchStory,
     output_dir: Path | None = None,
     *,
-    model: str = "qwen-plus",
+    model: str = DEFAULT_MODEL,
 ) -> dict[str, Any]:
     """异步运行一次 Story2Proposal，并返回 context 与 summary。"""
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -61,7 +61,7 @@ def run_story_to_proposal_sync(
     story: ResearchStory,
     output_dir: Path | None = None,
     *,
-    model: str = "qwen-plus",
+    model: str = DEFAULT_MODEL,
 ) -> dict[str, Any]:
     """同步包装器，方便脚本或外部调用方直接使用。"""
     return asyncio.run(run_story_to_proposal(story, output_dir=output_dir, model=model))

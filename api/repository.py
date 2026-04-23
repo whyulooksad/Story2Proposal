@@ -17,7 +17,7 @@ from pathlib import Path
 from threading import Lock, Thread
 from typing import Any
 
-from config import OUTPUTS_DIR, STORIES_DIR
+from config import DEFAULT_MODEL, OUTPUTS_DIR, STORIES_DIR
 from runner import run_story_to_proposal_sync
 from schemas import ResearchStory
 
@@ -119,7 +119,7 @@ class RunRepository:
                 items[output_dir.name] = RunItemResponse(
                     id=output_dir.name,
                     storyId=story_id,
-                    model="qwen-plus",
+                    model=DEFAULT_MODEL,
                     status="completed" if summary.get("final_status") == "rendered" else "running",
                     startedAt=_format_mtime(output_dir),
                     updatedAt=_format_mtime(summary_path),
@@ -248,7 +248,7 @@ class RunRepository:
         return RunDetailResponse(
             id=run_id,
             storyId=story_payload.get("story_id", run_id.split("_20")[0]),
-            model=active.model if active is not None else "qwen-plus",
+            model=active.model if active is not None else DEFAULT_MODEL,
             status=status,
             startedAt=started_at,
             updatedAt=updated_at,

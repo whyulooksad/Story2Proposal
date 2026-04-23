@@ -10,7 +10,7 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from config import STORIES_DIR
+from config import DEFAULT_MODEL, STORIES_DIR
 from runner import run_story_to_proposal
 from schemas import ResearchStory
 
@@ -23,7 +23,7 @@ async def main() -> None:
         default=str(STORIES_DIR / "sample_story.json"),
         help="Path to a ResearchStory JSON file.",
     )
-    parser.add_argument("--model", default="qwen-plus")
+    parser.add_argument("--model", default=DEFAULT_MODEL)
     args = parser.parse_args()
 
     story = ResearchStory.from_path(Path(args.story))
