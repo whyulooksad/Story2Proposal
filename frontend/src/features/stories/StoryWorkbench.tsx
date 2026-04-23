@@ -309,50 +309,50 @@ export function StoryWorkbench({ stories, onSave, onRun }: StoryWorkbenchProps) 
 
         <div className="form-grid story-form-grid">
           <label className="field">
-            <span>story_id</span>
+            <span>故事 ID</span>
             <input value={story.story_id} onChange={(e) => patch("story_id", e.target.value)} />
           </label>
           <label className="field">
-            <span>title_hint</span>
+            <span>标题提示</span>
             <input value={story.title_hint ?? ""} onChange={(e) => patch("title_hint", e.target.value)} />
           </label>
           <label className="field field-wide">
-            <span>topic</span>
+            <span>研究主题</span>
             <input value={story.topic} onChange={(e) => patch("topic", e.target.value)} />
           </label>
           <label className="field field-wide">
-            <span>problem_statement</span>
+            <span>问题陈述</span>
             <textarea value={story.problem_statement} onChange={(e) => patch("problem_statement", e.target.value)} />
           </label>
           <label className="field field-wide">
-            <span>motivation</span>
+            <span>研究动机</span>
             <textarea value={story.motivation} onChange={(e) => patch("motivation", e.target.value)} />
           </label>
           <label className="field field-wide">
-            <span>core_idea</span>
+            <span>核心思路</span>
             <textarea value={story.core_idea} onChange={(e) => patch("core_idea", e.target.value)} />
           </label>
           <label className="field field-wide">
-            <span>method_summary</span>
+            <span>方法概述</span>
             <textarea value={story.method_summary} onChange={(e) => patch("method_summary", e.target.value)} />
           </label>
           <label className="field field-wide">
-            <span>contributions</span>
+            <span>主要贡献</span>
             <textarea
               value={toText(story.contributions)}
               onChange={(e) => patch("contributions", fromText(e.target.value))}
             />
           </label>
           <label className="field field-wide">
-            <span>baselines</span>
+            <span>对比基线</span>
             <textarea value={toText(story.baselines)} onChange={(e) => patch("baselines", fromText(e.target.value))} />
           </label>
           <label className="field field-wide">
-            <span>findings</span>
+            <span>核心发现</span>
             <textarea value={toText(story.findings)} onChange={(e) => patch("findings", fromText(e.target.value))} />
           </label>
           <label className="field field-wide">
-            <span>limitations</span>
+            <span>局限性</span>
             <textarea
               value={toText(story.limitations)}
               onChange={(e) => patch("limitations", fromText(e.target.value))}
@@ -381,29 +381,29 @@ export function StoryWorkbench({ stories, onSave, onRun }: StoryWorkbenchProps) 
                   </button>
                 </div>
                 <label className="field">
-                  <span>experiment_id</span>
+                  <span>实验 ID</span>
                   <input
                     value={experiment.experiment_id}
                     onChange={(e) => patchExperiment(index, { ...experiment, experiment_id: e.target.value })}
                   />
                 </label>
                 <label className="field">
-                  <span>name</span>
+                  <span>实验名称</span>
                   <input value={experiment.name} onChange={(e) => patchExperiment(index, { ...experiment, name: e.target.value })} />
                 </label>
                 <label className="field field-wide">
-                  <span>setup</span>
+                  <span>实验设置</span>
                   <textarea value={experiment.setup} onChange={(e) => patchExperiment(index, { ...experiment, setup: e.target.value })} />
                 </label>
                 <label className="field">
-                  <span>dataset</span>
+                  <span>数据集</span>
                   <input
                     value={experiment.dataset}
                     onChange={(e) => patchExperiment(index, { ...experiment, dataset: e.target.value })}
                   />
                 </label>
                 <label className="field">
-                  <span>metrics</span>
+                  <span>评价指标</span>
                   <input
                     value={experiment.metrics.join(", ")}
                     onChange={(e) =>
@@ -415,7 +415,7 @@ export function StoryWorkbench({ stories, onSave, onRun }: StoryWorkbenchProps) 
                   />
                 </label>
                 <label className="field field-wide">
-                  <span>result_summary</span>
+                  <span>结果摘要</span>
                   <textarea
                     value={experiment.result_summary}
                     onChange={(e) => patchExperiment(index, { ...experiment, result_summary: e.target.value })}
@@ -447,14 +447,14 @@ export function StoryWorkbench({ stories, onSave, onRun }: StoryWorkbenchProps) 
                   </button>
                 </div>
                 <label className="field">
-                  <span>reference_id</span>
+                  <span>文献 ID</span>
                   <input
                     value={reference.reference_id}
                     onChange={(e) => patchReference(index, { ...reference, reference_id: e.target.value })}
                   />
                 </label>
                 <label className="field">
-                  <span>year</span>
+                  <span>年份</span>
                   <input
                     value={reference.year ?? ""}
                     onChange={(e) =>
@@ -466,14 +466,14 @@ export function StoryWorkbench({ stories, onSave, onRun }: StoryWorkbenchProps) 
                   />
                 </label>
                 <label className="field field-wide">
-                  <span>title</span>
+                  <span>标题</span>
                   <input
                     value={reference.title}
                     onChange={(e) => patchReference(index, { ...reference, title: e.target.value })}
                   />
                 </label>
                 <label className="field field-wide">
-                  <span>authors</span>
+                  <span>作者</span>
                   <input
                     value={reference.authors.join(", ")}
                     onChange={(e) =>
@@ -485,7 +485,7 @@ export function StoryWorkbench({ stories, onSave, onRun }: StoryWorkbenchProps) 
                   />
                 </label>
                 <label className="field">
-                  <span>venue</span>
+                  <span>期刊 / 会议</span>
                   <input
                     value={reference.venue ?? ""}
                     onChange={(e) =>
@@ -497,7 +497,7 @@ export function StoryWorkbench({ stories, onSave, onRun }: StoryWorkbenchProps) 
                   />
                 </label>
                 <label className="field field-wide">
-                  <span>notes</span>
+                  <span>备注</span>
                   <textarea
                     value={reference.notes ?? ""}
                     onChange={(e) =>
@@ -534,29 +534,29 @@ export function StoryWorkbench({ stories, onSave, onRun }: StoryWorkbenchProps) 
                   </button>
                 </div>
                 <label className="field">
-                  <span>artifact_id</span>
+                  <span>资产 ID</span>
                   <input
                     value={asset.artifact_id}
                     onChange={(e) => patchAsset(index, { ...asset, artifact_id: e.target.value })}
                   />
                 </label>
                 <label className="field">
-                  <span>kind</span>
+                  <span>类型</span>
                   <input value={asset.kind} onChange={(e) => patchAsset(index, { ...asset, kind: e.target.value })} />
                 </label>
                 <label className="field field-wide">
-                  <span>title</span>
+                  <span>标题</span>
                   <input value={asset.title} onChange={(e) => patchAsset(index, { ...asset, title: e.target.value })} />
                 </label>
                 <label className="field field-wide">
-                  <span>description</span>
+                  <span>描述</span>
                   <textarea
                     value={asset.description}
                     onChange={(e) => patchAsset(index, { ...asset, description: e.target.value })}
                   />
                 </label>
                 <label className="field field-wide">
-                  <span>target_sections</span>
+                  <span>目标章节</span>
                   <input
                     value={asset.target_sections.join(", ")}
                     onChange={(e) =>
@@ -578,14 +578,14 @@ export function StoryWorkbench({ stories, onSave, onRun }: StoryWorkbenchProps) 
           </div>
           <div className="form-grid metadata-grid">
             <label className="field">
-              <span>target_venue</span>
+              <span>目标期刊 / 会议</span>
               <input
                 value={metadata.target_venue}
                 onChange={(e) => patchMetadata("target_venue", e.target.value)}
               />
             </label>
             <label className="field">
-              <span>writing_language</span>
+              <span>写作语言</span>
               <select
                 className="story-select"
                 value={metadata.writing_language}
@@ -596,29 +596,29 @@ export function StoryWorkbench({ stories, onSave, onRun }: StoryWorkbenchProps) 
               </select>
             </label>
             <label className="field">
-              <span>paper_type</span>
+              <span>论文类型</span>
               <input value={metadata.paper_type} onChange={(e) => patchMetadata("paper_type", e.target.value)} />
             </label>
             <label className="field">
-              <span>domain</span>
+              <span>研究领域</span>
               <input value={metadata.domain} onChange={(e) => patchMetadata("domain", e.target.value)} />
             </label>
             <label className="field field-wide">
-              <span>expected_sections</span>
+              <span>预期章节</span>
               <textarea
                 value={toText(metadata.expected_sections)}
                 onChange={(e) => patchMetadata("expected_sections", fromText(e.target.value))}
               />
             </label>
             <label className="field field-wide">
-              <span>keywords</span>
+              <span>关键词</span>
               <textarea
                 value={toText(metadata.keywords)}
                 onChange={(e) => patchMetadata("keywords", fromText(e.target.value))}
               />
             </label>
             <label className="field field-wide">
-              <span>notes</span>
+              <span>附加说明</span>
               <textarea value={metadata.notes} onChange={(e) => patchMetadata("notes", e.target.value)} />
             </label>
           </div>
