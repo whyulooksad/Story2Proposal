@@ -6,6 +6,7 @@ The agents here refer to the business roles inside the application graph, for ex
 - `orchestrator`
 - `architect`
 - `section_writer`
+- `visual_repair`
 - `reasoning_evaluator`
 - `data_fidelity_evaluator`
 - `visual_evaluator`
@@ -123,6 +124,14 @@ The priority is not decorative writing, but:
 - covering what the section is supposed to cover
 - using the required evidence / citation / visual elements
 - staying aligned with the structure of the paper as a whole
+
+### `visual_repair`
+
+Responsible for localized repair when a section fails mainly because of visual alignment problems, for example:
+
+- missing explanation around a required figure/table
+- visual token placement that is too far from the relevant paragraph
+- lightweight visual-reference fixes that do not justify rewriting the whole section
 
 ### `reasoning_evaluator`
 

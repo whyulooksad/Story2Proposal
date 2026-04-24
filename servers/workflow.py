@@ -85,6 +85,18 @@ async def capture_section_writer_output(
     return context
 
 
+@server.tool()
+async def capture_visual_repair_output(
+    messages: list[dict[str, Any]],
+    context: dict[str, Any],
+    agent: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """在 visual_repair 完成后保存局部修复后的章节草稿。"""
+    draft = _parse_agent_output(messages, agent, SectionDraft)
+    save_section_draft(context, draft)
+    return context
+
+
 def _capture_feedback(
     evaluator_type: str,
     messages: list[dict[str, Any]],

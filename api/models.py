@@ -47,7 +47,7 @@ class RunOverviewResponse(BaseModel):
     completedSections: int
     pendingSections: int
     manualReviewCount: int
-    renderWarningCount: int
+    workflowWarningCount: int
     evaluationOverallScore: float | None = None
 
 
@@ -70,6 +70,7 @@ class RunItemResponse(BaseModel):
     status: str
     startedAt: str
     updatedAt: str
+    error: str | None = None
 
 
 class RunDetailResponse(RunItemResponse):

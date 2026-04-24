@@ -99,6 +99,15 @@ export function RunDetailPage() {
         </div>
       </section>
 
+      {data.error ? (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>失败原因</h2>
+          </div>
+          <pre className="artifact-content compact">{data.error}</pre>
+        </section>
+      ) : null}
+
       <div className="run-shell">
         <aside className="run-shell-side">
           <section className="panel">
@@ -127,8 +136,8 @@ export function RunDetailPage() {
                 <strong>{data.overview.manualReviewCount}</strong>
               </div>
               <div className="summary-card">
-                <span>渲染警告</span>
-                <strong>{data.overview.renderWarningCount}</strong>
+                <span>流程警告</span>
+                <strong>{data.overview.workflowWarningCount}</strong>
               </div>
               <div className="summary-card summary-card-wide">
                 <span>评测总分</span>

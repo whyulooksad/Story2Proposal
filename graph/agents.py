@@ -53,6 +53,12 @@ def build_agents(model: str) -> dict[str, Agent]:
             "section_writer.md",
             on_end="mcp__s2p_workflow__capture_section_writer_output",
         ),
+        "visual_repair": _make_agent(
+            "visual_repair",
+            model,
+            "visual_repair.md",
+            on_end="mcp__s2p_workflow__capture_visual_repair_output",
+        ),
         "reasoning_evaluator": _make_agent(
             "reasoning_evaluator",
             model,

@@ -49,7 +49,7 @@ def build_initial_context(
     story: ResearchStory,
     output_dir: Path,
     *,
-    max_rewrite_per_section: int = 2,
+    max_rewrite_per_section: int = 3,
 ) -> dict[str, Any]:
     """为一次 Story2Proposal 运行创建初始共享 `context`。"""
     context: dict[str, Any] = {

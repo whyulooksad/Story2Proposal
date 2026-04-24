@@ -24,6 +24,9 @@ def build_story2proposal_graph(model: str) -> Agent:
             Edge(source="section_writer", target="reasoning_evaluator"),
             Edge(source="section_writer", target="data_fidelity_evaluator"),
             Edge(source="section_writer", target="visual_evaluator"),
+            Edge(source="visual_repair", target="reasoning_evaluator"),
+            Edge(source="visual_repair", target="data_fidelity_evaluator"),
+            Edge(source="visual_repair", target="visual_evaluator"),
             Edge(
                 source=("reasoning_evaluator", "data_fidelity_evaluator", "visual_evaluator"),
                 target="review_controller",

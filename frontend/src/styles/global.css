@@ -338,7 +338,8 @@ dt {
   color: var(--success);
 }
 
-.status-failed {
+.status-failed,
+.state-manual_review {
   background: rgba(215, 134, 147, 0.12);
   color: var(--danger);
 }

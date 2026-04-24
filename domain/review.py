@@ -85,6 +85,37 @@ def _derive_contract_evolution_patches(
     return patches
 
 
+def _should_use_visual_repair(
+    context: dict[str, Any],
+    aggregate: dict[str, Any],
+    section_id: str,
+) -> bool:
+    """判断当前 revise 是否属于可由局部 visual repair 解决的问题。"""
+    deterministic_checks = aggregate.get("deterministic_checks", {})
+    visual_only_checks = bool(deterministic_checks.get("visual_references")) and not any(
+        deterministic_checks.get(name)
+        for name in ("section_coverage", "citation_hygiene", "data_fidelity", "traceability")
+    )
+    if not visual_only_checks:
+        return False
+
+    reviews = list((context.get("reviews") or {}).get(section_id, []))
+    if not reviews:
+        return False
+
+    visual_status = None
+    for review in reviews:
+        evaluator_type = review.get("evaluator_type")
+        status = review.get("status")
+        if evaluator_type == "visual":
+            visual_status = status
+            continue
+        if status in {"revise", "fail"}:
+            return False
+
+    return visual_status in {"revise", "fail"}
+
+
 def apply_review_cycle(context: dict[str, Any]) -> dict[str, Any]:
     """根据聚合反馈决定当前章节是推进还是重写。"""
     aggregate = aggregate_current_feedback(context)
@@ -93,18 +124,21 @@ def apply_review_cycle(context: dict[str, Any]) -> dict[str, Any]:
     section_id = runtime["current_section_id"]
     rewrite_count = runtime["rewrite_count"].get(section_id, 0)
     next_action = "advance"
+    section_final_status = "approved"
 
     if aggregate["status"] in {"revise", "fail"}:
         if rewrite_count < runtime["max_rewrite_per_section"]:
             runtime["rewrite_count"][section_id] = rewrite_count + 1
-            next_action = "rewrite"
+            next_action = "visual_repair" if _should_use_visual_repair(context, aggregate, section_id) else "rewrite"
             for section in contract["sections"]:
                 if section["section_id"] == section_id:
                     section["status"] = "needs_revision"
                     break
         else:
-            runtime["needs_manual_review"].append(section_id)
+            if section_id not in runtime["needs_manual_review"]:
+                runtime["needs_manual_review"].append(section_id)
             next_action = "advance"
+            section_final_status = "manual_review"
 
     evolution_patches = _derive_contract_evolution_patches(
         aggregate,
@@ -129,7 +163,7 @@ def apply_review_cycle(context: dict[str, Any]) -> dict[str, Any]:
         runtime["current_draft_version"] = 0
         for section in contract["sections"]:
             if section["section_id"] == section_id:
-                section["status"] = "approved"
+                section["status"] = section_final_status
                 break
 
     contract["global_status"]["state"] = "all_sections_completed" if runtime["current_section_id"] is None else "section_reviewed"
@@ -153,5 +187,10 @@ def apply_review_cycle(context: dict[str, Any]) -> dict[str, Any]:
     )
 
     runtime["final_status"] = "all_sections_completed" if runtime["current_section_id"] is None else runtime.get("final_status")
-    runtime["next_node"] = "refiner" if runtime["current_section_id"] is None else "section_writer"
+    if runtime["current_section_id"] is None:
+        runtime["next_node"] = "refiner"
+    elif next_action == "visual_repair":
+        runtime["next_node"] = "visual_repair"
+    else:
+        runtime["next_node"] = "section_writer"
     return context

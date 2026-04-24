@@ -12,7 +12,7 @@ export interface RunItem {
 export interface SectionState {
   id: string;
   title: string;
-  status: "pending" | "writing" | "review" | "approved" | "revise";
+  status: "pending" | "writing" | "review" | "approved" | "revise" | "manual_review";
   rewriteCount: number;
 }
 
@@ -29,7 +29,7 @@ export interface RunOverview {
   completedSections: number;
   pendingSections: number;
   manualReviewCount: number;
-  renderWarningCount: number;
+  workflowWarningCount: number;
   evaluationOverallScore: number | null;
 }
 
@@ -42,6 +42,7 @@ export interface RunReviewState {
 }
 
 export interface RunDetail extends RunItem {
+  error?: string | null;
   currentNode: string;
   currentSectionId: string | null;
   nextNode: string | null;

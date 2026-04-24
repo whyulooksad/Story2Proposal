@@ -1,5 +1,14 @@
 import type { SectionState } from "../../types/run";
 
+const sectionStatusLabels: Record<SectionState["status"], string> = {
+  pending: "待处理",
+  writing: "写作中",
+  review: "评审中",
+  approved: "已通过",
+  revise: "待重写",
+  manual_review: "人工复核",
+};
+
 export function SectionStatusList({ sections }: { sections: SectionState[] }) {
   return (
     <section className="panel">
@@ -15,7 +24,9 @@ export function SectionStatusList({ sections }: { sections: SectionState[] }) {
                 <div className="section-subtle">{section.id}</div>
               </div>
               <div className="section-right">
-                <span className={`section-state state-${section.status}`}>{section.status}</span>
+                <span className={`section-state state-${section.status}`}>
+                  {sectionStatusLabels[section.status] ?? section.status}
+                </span>
                 <span className="section-rewrite">重写 {section.rewriteCount} 次</span>
               </div>
             </div>
