@@ -51,6 +51,28 @@ def create_run(payload: RunCreateRequest) -> RunDetailResponse:
     return runs.create(payload.story, payload.model)
 
 
+@router.post("/runs/{run_id}/stop", response_model=RunDetailResponse)
+def stop_run(run_id: str) -> RunDetailResponse:
+    """Request a cooperative stop for a running run."""
+    try:
+        return runs.stop(run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.delete("/runs/{run_id}", status_code=204)
+def delete_run(run_id: str) -> None:
+    """Delete a non-running run and its persisted artifacts."""
+    try:
+        runs.delete(run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.get("/runs/{run_id}", response_model=RunDetailResponse)
 def get_run(run_id: str) -> RunDetailResponse:
     """返回某个 run 的详情状态和聚合产物。"""

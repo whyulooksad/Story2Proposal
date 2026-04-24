@@ -1,4 +1,4 @@
-export type RunStatus = "pending" | "running" | "completed" | "failed";
+export type RunStatus = "pending" | "running" | "stopping" | "completed" | "failed" | "stopped";
 
 export interface RunItem {
   id: string;
@@ -7,6 +7,7 @@ export interface RunItem {
   status: RunStatus;
   startedAt: string;
   updatedAt: string;
+  error?: string | null;
 }
 
 export interface SectionState {

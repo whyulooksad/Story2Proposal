@@ -237,7 +237,8 @@ dt {
 }
 
 .primary-button,
-.ghost-button {
+.ghost-button,
+.danger-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -266,6 +267,32 @@ dt {
 
 .ghost-button:hover {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.danger-button {
+  color: #fff2f4;
+  background: rgba(215, 134, 147, 0.12);
+  border-color: rgba(215, 134, 147, 0.24);
+}
+
+.danger-button:hover {
+  background: rgba(215, 134, 147, 0.18);
+}
+
+.primary-button:disabled,
+.ghost-button:disabled,
+.danger-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.inline-error {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(215, 134, 147, 0.24);
+  background: rgba(215, 134, 147, 0.12);
+  color: #ffd8dd;
 }
 
 .page-heading {
@@ -332,10 +359,20 @@ dt {
   color: var(--info);
 }
 
+.status-stopping {
+  background: rgba(213, 167, 109, 0.12);
+  color: var(--warning);
+}
+
 .status-completed,
 .state-approved {
   background: rgba(119, 197, 163, 0.12);
   color: var(--success);
+}
+
+.status-stopped {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-soft);
 }
 
 .status-failed,
@@ -594,6 +631,12 @@ dt {
   box-shadow: var(--shadow);
 }
 
+.run-hero-actions {
+  display: flex;
+  gap: 10px;
+  align-self: start;
+}
+
 .run-hero-copy h1 {
   margin: 8px 0 10px;
   font-size: clamp(1.5rem, 2vw, 2.2rem);
@@ -630,6 +673,17 @@ dt {
 .run-chip strong {
   font-size: 0.92rem;
   font-weight: 600;
+}
+
+.table-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.table-action-button {
+  min-height: 34px;
+  padding: 0 12px;
 }
 
 .run-shell {
@@ -915,6 +969,50 @@ dd {
 
 .artifact-content-main {
   min-height: 520px;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 7, 10, 0.62);
+  backdrop-filter: blur(8px);
+}
+
+.dialog-panel {
+  width: min(520px, calc(100vw - 32px));
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 24px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--shadow);
+}
+
+.dialog-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.dialog-copy h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.dialog-copy p {
+  margin: 0;
+  color: #d0d5de;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .evaluation-report {
@@ -1245,6 +1343,10 @@ dd {
   .run-hero {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .run-hero-actions {
+    flex-wrap: wrap;
   }
 
   .run-hero-meta,

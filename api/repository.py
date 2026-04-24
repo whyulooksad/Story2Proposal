@@ -1,23 +1,19 @@
 from __future__ import annotations
 
-"""API 层的数据访问与运行管理。
-
-这一层负责：
-- 从 `data/stories/` 读取和保存 `ResearchStory`
-- 从 `data/outputs/` 聚合 run 列表、run 详情和产物
-- 在后台线程中启动一次真实 run，并把失败原因持久化出来
-"""
+"""API-side story persistence and process-based run lifecycle management."""
 
 import json
-import traceback
+import shutil
+import signal
+import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from threading import Lock, Thread
+from threading import Lock
 from typing import Any
 
 from config import DEFAULT_MODEL, OUTPUTS_DIR, STORIES_DIR
-from runner import run_story_to_proposal_sync
 from schemas import ResearchStory
 
 from .models import (
@@ -31,24 +27,24 @@ from .models import (
 
 
 def _read_json(path: Path) -> Any:
-    """读取一个 UTF-8 JSON 文件并反序列化。"""
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _read_json_if_exists(path: Path) -> Any | None:
-    """如果文件存在则读取 JSON，否则返回 `None`。"""
     if not path.exists():
         return None
     return _read_json(path)
 
 
+def _write_json(path: Path, payload: Any) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _format_mtime(path: Path) -> str:
-    """把文件修改时间格式化成前端可直接展示的字符串。"""
     return datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
 
 
 def _combine_files(paths: list[Path]) -> str:
-    """把多份文件拼成一个文本块，便于前端一次性查看。"""
     chunks: list[str] = []
     for path in sorted(paths):
         chunks.append(f"# {path.name}\n\n{path.read_text(encoding='utf-8')}")
@@ -56,7 +52,6 @@ def _combine_files(paths: list[Path]) -> str:
 
 
 def _map_section_status(status: str) -> str:
-    """把 contract 内部状态映射成前端使用的状态名。"""
     mapping = {
         "pending": "pending",
         "drafted": "writing",
@@ -67,64 +62,111 @@ def _map_section_status(status: str) -> str:
     return mapping.get(status, status)
 
 
+def _map_run_status(status: str | None) -> str:
+    """Map persisted final status values to frontend statuses."""
+    if status in {None, "", "running"}:
+        return "running"
+    if status == "rendered":
+        return "completed"
+    if status in {"completed", "failed", "stopped", "stopping", "pending"}:
+        return status
+    return "failed"
+
+
 def _count_workflow_warnings(contract_payload: dict[str, Any]) -> int:
-    """统计 contract / workflow 层面的 warning 数量。"""
     return len((contract_payload.get("global_status") or {}).get("warnings", []))
 
 
-def _build_error_payload(exc: Exception) -> dict[str, str]:
-    """构造一个可持久化、可暴露给前端的错误快照。"""
+def _build_stop_payload(*, requested_at: str) -> dict[str, str]:
     return {
-        "message": str(exc),
-        "traceback": traceback.format_exc(),
-        "failed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "message": "Run was stopped by user request.",
+        "requested_at": requested_at,
     }
 
 
-def _load_error_message(output_dir: Path, active: "ActiveRun | None") -> str | None:
-    """优先从活动 run 读取错误，回退到落盘的 error.json。"""
-    if active is not None and active.error:
-        return active.error
+def _build_summary_snapshot(output_dir: Path, *, final_status: str) -> dict[str, Any]:
+    state_payload = _read_json_if_exists(output_dir / "logs" / "run_state.json") or {}
+    runtime = state_payload.get("runtime", {})
+    evaluation = _read_json_if_exists(output_dir / "logs" / "evaluation.json") or {}
+    rendered_path = output_dir / "rendered" / "final_manuscript.md"
+    return {
+        "run_id": output_dir.name,
+        "final_status": final_status,
+        "completed_sections": runtime.get("completed_sections", []),
+        "rewrite_count": runtime.get("rewrite_count", {}),
+        "needs_manual_review": runtime.get("needs_manual_review", []),
+        "render_warnings": [],
+        "evaluation_overall_score": evaluation.get("overall_score"),
+        "evaluation_risks": evaluation.get("risks", []),
+        "output_dir": str(output_dir),
+        "has_rendered_manuscript": rendered_path.exists(),
+    }
+
+
+def _load_error_message(output_dir: Path) -> str | None:
     error_payload = _read_json_if_exists(output_dir / "logs" / "error.json")
     if isinstance(error_payload, dict):
         return error_payload.get("message")
+    summary_payload = _read_json_if_exists(output_dir / "logs" / "run_summary.json") or {}
+    if not summary_payload and (output_dir / "logs" / "run_state.json").exists():
+        return "Run metadata is incomplete. This run is not active in the current server process."
     return None
 
 
-def _infer_run_status(
-    output_dir: Path,
-    summary_payload: dict[str, Any],
-    active: "ActiveRun | None",
-) -> str:
-    """从活动状态、summary 和 error snapshot 推导 run 状态。"""
-    if active is not None:
-        return active.status
-    if (output_dir / "logs" / "error.json").exists():
-        return "failed"
-    if summary_payload.get("final_status") == "rendered":
-        return "completed"
-    return "running"
+def _launch_run_process(story_path: Path, output_dir: Path, model: str) -> subprocess.Popen[str]:
+    stdout_path = output_dir / "logs" / "worker_stdout.log"
+    stderr_path = output_dir / "logs" / "worker_stderr.log"
+    stdout_handle = stdout_path.open("w", encoding="utf-8")
+    stderr_handle = stderr_path.open("w", encoding="utf-8")
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "api.run_job",
+            "--story",
+            str(story_path),
+            "--output-dir",
+            str(output_dir),
+            "--model",
+            model,
+        ],
+        cwd=str(Path(__file__).resolve().parents[1]),
+        stdout=stdout_handle,
+        stderr=stderr_handle,
+        text=True,
+        creationflags=creationflags,
+    )
+
+
+def _terminate_process(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    if sys.platform == "win32":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    else:
+        process.send_signal(signal.SIGTERM)
 
 
 @dataclass
 class ActiveRun:
-    """进程内维护的一条活动 run 记录。"""
-
     run_id: str
     story_id: str
     model: str
     started_at: str
     updated_at: str
-    status: str
     output_dir: Path
-    error: str | None = None
+    process: subprocess.Popen[str]
+    stop_requested_at: str | None = None
 
 
 class StoryRepository:
-    """管理 `ResearchStory` 的文件读写。"""
-
     def list(self) -> list[ResearchStory]:
-        """读取 stories 目录下全部 story，并按修改时间倒序返回。"""
         items: list[tuple[float, ResearchStory]] = []
         for path in STORIES_DIR.glob("*.json"):
             story = ResearchStory.from_path(path)
@@ -133,21 +175,34 @@ class StoryRepository:
         return [item[1] for item in items]
 
     def save(self, story: ResearchStory) -> ResearchStory:
-        """把一份 `ResearchStory` 落盘到 stories 目录。"""
         path = STORIES_DIR / f"{story.story_id}.json"
         path.write_text(story.model_dump_json(indent=2), encoding="utf-8")
         return story
 
 
 class RunRepository:
-    """管理 run 的创建、跟踪和产物聚合。"""
-
     def __init__(self) -> None:
         self._lock = Lock()
         self._active_runs: dict[str, ActiveRun] = {}
 
+    def _status_for_active(self, run: ActiveRun) -> str:
+        return "stopping" if run.stop_requested_at else "running"
+
+    def _reconcile_active(self, run_id: str, active: ActiveRun) -> str:
+        if active.process.poll() is None:
+            return self._status_for_active(active)
+
+        final_status = "stopped" if active.stop_requested_at else ("failed" if active.process.returncode else "completed")
+        if final_status in {"stopped", "failed"}:
+            summary_path = active.output_dir / "logs" / "run_summary.json"
+            if not summary_path.exists():
+                _write_json(summary_path, _build_summary_snapshot(active.output_dir, final_status=final_status))
+
+        with self._lock:
+            self._active_runs.pop(run_id, None)
+        return final_status
+
     def list(self) -> list[RunItemResponse]:
-        """聚合历史输出目录和当前进程中的活动 run。"""
         items: dict[str, RunItemResponse] = {}
 
         if OUTPUTS_DIR.exists():
@@ -158,16 +213,15 @@ class RunRepository:
                 summary_path = logs_dir / "run_summary.json"
                 state_path = logs_dir / "run_state.json"
                 error_path = logs_dir / "error.json"
-                if not summary_path.exists() and not state_path.exists() and not error_path.exists():
+                stop_path = logs_dir / "stop.json"
+                if not any(path.exists() for path in (summary_path, state_path, error_path, stop_path)):
                     continue
 
                 summary = _read_json_if_exists(summary_path) or {}
                 story_payload = _read_json_if_exists(output_dir / "input_story.json") or {}
-                story_id = story_payload.get(
-                    "story_id",
-                    summary.get("run_id", output_dir.name).split("_20")[0],
-                )
-                status = _infer_run_status(output_dir, summary, None)
+                story_id = story_payload.get("story_id", summary.get("run_id", output_dir.name).split("_20")[0])
+                status = _map_run_status(summary.get("final_status")) if summary_path.exists() else ("failed" if error_path.exists() else "failed")
+                latest_path = next((path for path in (summary_path, state_path, error_path, stop_path) if path.exists()), output_dir)
 
                 items[output_dir.name] = RunItemResponse(
                     id=output_dir.name,
@@ -175,29 +229,41 @@ class RunRepository:
                     model=DEFAULT_MODEL,
                     status=status,
                     startedAt=_format_mtime(output_dir),
-                    updatedAt=_format_mtime(
-                        summary_path if summary_path.exists() else (state_path if state_path.exists() else error_path)
-                    ),
-                    error=_load_error_message(output_dir, None),
+                    updatedAt=_format_mtime(latest_path),
+                    error=_load_error_message(output_dir),
                 )
 
-        # 活动 run 以内存状态为准，覆盖同名历史项。
         with self._lock:
-            for run in self._active_runs.values():
-                items[run.run_id] = RunItemResponse(
-                    id=run.run_id,
-                    storyId=run.story_id,
-                    model=run.model,
-                    status=run.status,
-                    startedAt=run.started_at,
-                    updatedAt=run.updated_at,
-                    error=run.error,
-                )
+            active_items = list(self._active_runs.items())
+
+        for run_id, active in active_items:
+            status = self._reconcile_active(run_id, active)
+            latest_path = next(
+                (
+                    path
+                    for path in (
+                        active.output_dir / "logs" / "run_summary.json",
+                        active.output_dir / "logs" / "run_state.json",
+                        active.output_dir / "logs" / "stop.json",
+                        active.output_dir / "logs" / "error.json",
+                    )
+                    if path.exists()
+                ),
+                active.output_dir,
+            )
+            items[run_id] = RunItemResponse(
+                id=run_id,
+                storyId=active.story_id,
+                model=active.model,
+                status=status,
+                startedAt=active.started_at,
+                updatedAt=_format_mtime(latest_path) if latest_path.exists() else active.updated_at,
+                error=_load_error_message(active.output_dir),
+            )
 
         return sorted(items.values(), key=lambda item: item.updatedAt, reverse=True)
 
     def create(self, story: ResearchStory, model: str) -> RunDetailResponse:
-        """创建一个新 run，并在后台线程中启动。"""
         timestamp = datetime.now()
         run_id = f"{story.story_id}_{timestamp.strftime('%Y%m%d_%H%M%S')}"
         output_dir = OUTPUTS_DIR / run_id
@@ -210,49 +276,68 @@ class RunRepository:
         story_path = STORIES_DIR / f"{story.story_id}.json"
         story_path.write_text(story.model_dump_json(indent=2), encoding="utf-8")
 
+        process = _launch_run_process(story_path, output_dir, model)
         active = ActiveRun(
             run_id=run_id,
             story_id=story.story_id,
             model=model,
             started_at=timestamp.strftime("%Y-%m-%d %H:%M"),
             updated_at=timestamp.strftime("%Y-%m-%d %H:%M"),
-            status="running",
             output_dir=output_dir,
+            process=process,
         )
         with self._lock:
             self._active_runs[run_id] = active
 
-        Thread(
-            target=self._run_in_background,
-            args=(story, output_dir, active),
-            daemon=True,
-        ).start()
-
         return self.get(run_id)
 
-    def _run_in_background(self, story: ResearchStory, output_dir: Path, active: ActiveRun) -> None:
-        """后台执行一次真实的 Story2Proposal run。"""
-        try:
-            run_story_to_proposal_sync(story, output_dir=output_dir, model=active.model)
-            active.status = "completed"
-        except Exception as exc:  # pragma: no cover
-            active.status = "failed"
-            active.error = str(exc)
-            error_payload = _build_error_payload(exc)
-            (output_dir / "logs" / "error.json").write_text(
-                json.dumps(error_payload, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            # 失败必须留在后端终端里，不能只在内存里吞掉。
-            print(error_payload["traceback"])
-        finally:
-            active.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    def stop(self, run_id: str) -> RunDetailResponse:
+        with self._lock:
+            active = self._active_runs.get(run_id)
+        if active is None:
+            if (OUTPUTS_DIR / run_id).exists():
+                raise RuntimeError("Run is not active in the current server process and cannot be stopped.")
+            raise FileNotFoundError(run_id)
+        if active.process.poll() is not None:
+            raise RuntimeError("Run is no longer active.")
+        if active.stop_requested_at:
+            return self.get(run_id)
 
-    def get(self, run_id: str) -> RunDetailResponse:
-        """读取某个 run 的当前状态，并组装为前端详情响应。"""
+        requested_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        active.stop_requested_at = requested_at
+        active.updated_at = requested_at[:16]
+        _write_json(active.output_dir / "logs" / "stop.json", _build_stop_payload(requested_at=requested_at))
+        _terminate_process(active.process)
+        return self.get(run_id)
+
+    def delete(self, run_id: str) -> None:
         output_dir = OUTPUTS_DIR / run_id
         with self._lock:
             active = self._active_runs.get(run_id)
+        if active is not None and active.process.poll() is None:
+            raise RuntimeError("Cannot delete a running run. Stop it first.")
+        if active is None and not output_dir.exists():
+            raise FileNotFoundError(run_id)
+        if output_dir.exists():
+            shutil.rmtree(output_dir)
+        with self._lock:
+            self._active_runs.pop(run_id, None)
+
+    def get(self, run_id: str) -> RunDetailResponse:
+        output_dir = OUTPUTS_DIR / run_id
+        with self._lock:
+            active = self._active_runs.get(run_id)
+
+        if active is not None:
+            status = self._reconcile_active(run_id, active)
+        elif not output_dir.exists():
+            raise FileNotFoundError(run_id)
+        else:
+            summary_payload = _read_json_if_exists(output_dir / "logs" / "run_summary.json") or {}
+            if summary_payload:
+                status = _map_run_status(summary_payload.get("final_status"))
+            else:
+                status = "failed" if (output_dir / "logs" / "run_state.json").exists() else "failed"
 
         if not output_dir.exists():
             raise FileNotFoundError(run_id)
@@ -274,10 +359,7 @@ class RunRepository:
             for section in contract_payload.get("sections", [])
         ]
 
-        status = _infer_run_status(output_dir, summary_payload, active)
-        error_message = _load_error_message(output_dir, active)
         latest_review = state_artifacts.get("last_aggregate_feedback") or {}
-
         overview = RunOverviewResponse(
             finalStatus=summary_payload.get("final_status", status),
             contractState=(contract_payload.get("global_status") or {}).get("state", "unknown"),
@@ -295,29 +377,31 @@ class RunRepository:
             deterministicChecks=latest_review.get("deterministic_checks", {}),
         )
 
-        started_at = active.started_at if active is not None else _format_mtime(output_dir)
-        updated_at = (
-            active.updated_at
-            if active is not None
-            else _format_mtime(
-                output_dir / "logs" / "run_summary.json"
-                if (output_dir / "logs" / "run_summary.json").exists()
-                else (
-                    output_dir / "logs" / "run_state.json"
-                    if (output_dir / "logs" / "run_state.json").exists()
-                    else output_dir / "logs" / "error.json"
+        latest_path = next(
+            (
+                path
+                for path in (
+                    output_dir / "logs" / "run_summary.json",
+                    output_dir / "logs" / "run_state.json",
+                    output_dir / "logs" / "stop.json",
+                    output_dir / "logs" / "error.json",
                 )
-            )
+                if path.exists()
+            ),
+            output_dir,
         )
+        started_at = active.started_at if active is not None else _format_mtime(output_dir)
+        updated_at = active.updated_at if active is not None else _format_mtime(latest_path)
+        model = active.model if active is not None else DEFAULT_MODEL
 
         return RunDetailResponse(
             id=run_id,
             storyId=story_payload.get("story_id", run_id.split("_20")[0]),
-            model=active.model if active is not None else DEFAULT_MODEL,
+            model=model,
             status=status,
             startedAt=started_at,
             updatedAt=updated_at,
-            error=error_message,
+            error=_load_error_message(output_dir),
             currentNode=runtime.get("next_node") or ("renderer" if status == "completed" else "orchestrator"),
             currentSectionId=runtime.get("current_section_id"),
             nextNode=runtime.get("next_node"),
@@ -328,7 +412,6 @@ class RunRepository:
         )
 
     def _build_artifacts(self, output_dir: Path) -> list[RunArtifactResponse]:
-        """从输出目录读取前端需要的各类 artifact。"""
         artifacts: list[RunArtifactResponse] = []
         single_files = [
             ("blueprint", "Blueprint", output_dir / "blueprint.json"),
@@ -394,7 +477,10 @@ class RunRepository:
         log_files = [
             output_dir / "logs" / "run_summary.json",
             output_dir / "logs" / "run_state.json",
+            output_dir / "logs" / "stop.json",
             output_dir / "logs" / "error.json",
+            output_dir / "logs" / "worker_stdout.log",
+            output_dir / "logs" / "worker_stderr.log",
         ]
         artifacts.append(
             RunArtifactResponse(

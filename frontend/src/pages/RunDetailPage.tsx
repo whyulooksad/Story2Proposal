@@ -1,23 +1,29 @@
-import { useQuery } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useParams } from "react-router-dom";
 
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ArtifactViewer } from "../features/artifacts/ArtifactViewer";
 import { EventLogPanel } from "../features/logs/EventLogPanel";
 import { RunStatusBadge } from "../features/runs/RunStatusBadge";
 import { SectionStatusList } from "../features/workflow/SectionStatusList";
 import { WorkflowPanel } from "../features/workflow/WorkflowPanel";
-import { getRunDetail } from "../services/runs";
+import { deleteRun, getRunDetail, stopRun } from "../services/runs";
 
 const reviewCheckLabels: Record<string, string> = {
   section_coverage: "章节覆盖",
   visual_references: "图表引用",
-  citation_hygiene: "引用卫生",
+  citation_hygiene: "引用规范",
   data_fidelity: "数据忠实性",
   traceability: "可追踪性",
 };
 
 export function RunDetailPage() {
   const { runId = "" } = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["run", runId],
     queryFn: () => getRunDetail(runId),
@@ -27,9 +33,28 @@ export function RunDetailPage() {
       if (!runId || !run) {
         return false;
       }
-      return run.status === "running" ? 2500 : false;
+      return run.status === "running" || run.status === "stopping" ? 2500 : false;
     },
     refetchIntervalInBackground: true,
+  });
+
+  const stopMutation = useMutation({
+    mutationFn: stopRun,
+    onSuccess: (run) => {
+      queryClient.setQueryData(["run", run.id], run);
+      void queryClient.invalidateQueries({ queryKey: ["runs"] });
+      void queryClient.invalidateQueries({ queryKey: ["run", run.id] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteRun,
+    onSuccess: async () => {
+      setConfirmDeleteOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["runs"] });
+      queryClient.removeQueries({ queryKey: ["run", runId] });
+      navigate("/runs");
+    },
   });
 
   if (isLoading) {
@@ -61,7 +86,13 @@ export function RunDetailPage() {
   }
 
   const refreshStatus =
-    data.status === "running" ? (isFetching ? "同步中" : "自动轮询中") : "已停止轮询";
+    data.status === "running" || data.status === "stopping"
+      ? isFetching
+        ? "同步中"
+        : "自动轮询中"
+      : "已停止轮询";
+  const canStop = data.status === "running";
+  const canDelete = data.status !== "running" && data.status !== "stopping";
 
   return (
     <div className="page-stack">
@@ -70,6 +101,28 @@ export function RunDetailPage() {
           <div className="eyebrow">Run</div>
           <h1>{data.id}</h1>
           <p>{data.storyId}</p>
+        </div>
+        <div className="run-hero-actions">
+          {canStop ? (
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => stopMutation.mutate(data.id)}
+              disabled={stopMutation.isPending}
+            >
+              终止 Run
+            </button>
+          ) : null}
+          {canDelete ? (
+            <button
+              type="button"
+              className="danger-button"
+              onClick={() => setConfirmDeleteOpen(true)}
+              disabled={deleteMutation.isPending}
+            >
+              删除 Run
+            </button>
+          ) : null}
         </div>
         <div className="run-hero-meta">
           <div className="run-chip">
@@ -98,6 +151,9 @@ export function RunDetailPage() {
           </div>
         </div>
       </section>
+
+      {stopMutation.error ? <div className="inline-error">停止失败：{stopMutation.error.message}</div> : null}
+      {deleteMutation.error ? <div className="inline-error">删除失败：{deleteMutation.error.message}</div> : null}
 
       {data.error ? (
         <section className="panel">
@@ -191,6 +247,15 @@ export function RunDetailPage() {
           <ArtifactViewer run={data} />
         </section>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title="删除 Run"
+        body={`确定删除这个 Run 吗？\n\n${data.id}`}
+        confirmLabel="确认删除"
+        onCancel={() => setConfirmDeleteOpen(false)}
+        onConfirm={() => deleteMutation.mutate(data.id)}
+      />
     </div>
   );
 }
