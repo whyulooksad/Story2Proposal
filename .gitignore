@@ -15,7 +15,9 @@ __pycache__/
 .venv/
 data/outputs/
 idea.md
+plan.md
 Story2Proposal A Scaffold for Structured Scientific Paper Writing.pdf
+Story2Proposal A Scaffold for Structured Scientific Paper Writing.txt
 introduce.md
 story_io.md
 frontend/DESIGN.md

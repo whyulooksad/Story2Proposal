@@ -25,6 +25,8 @@ from .models import (
     RunArtifactResponse,
     RunDetailResponse,
     RunItemResponse,
+    RunOverviewResponse,
+    RunReviewStateResponse,
     SectionStateResponse,
 )
 
@@ -56,6 +58,11 @@ def _map_section_status(status: str) -> str:
         "approved": "approved",
     }
     return mapping.get(status, status)
+
+
+def _count_validation_warnings(contract_payload: dict[str, Any]) -> int:
+    """统计 contract global status 里的 warning 数量。"""
+    return len((contract_payload.get("global_status") or {}).get("warnings", []))
 
 
 @dataclass
@@ -196,9 +203,12 @@ class RunRepository:
             raise FileNotFoundError(run_id)
 
         runtime = {}
+        state_artifacts = {}
         state_path = output_dir / "logs" / "run_state.json"
         if state_path.exists():
-            runtime = _read_json(state_path).get("runtime", {})
+            state_payload = _read_json(state_path)
+            runtime = state_payload.get("runtime", {})
+            state_artifacts = state_payload.get("artifacts", {})
 
         story_payload = {}
         story_path = output_dir / "input_story.json"
@@ -206,9 +216,11 @@ class RunRepository:
             story_payload = _read_json(story_path)
 
         contract_sections = []
+        contract_payload = {}
         contract_path = output_dir / "contract_final.json"
         if contract_path.exists():
-            contract_sections = _read_json(contract_path).get("sections", [])
+            contract_payload = _read_json(contract_path)
+            contract_sections = contract_payload.get("sections", [])
 
         summary_payload = {}
         summary_path = output_dir / "logs" / "run_summary.json"
@@ -230,13 +242,23 @@ class RunRepository:
         status = active.status if active is not None else (
             "completed" if summary_payload.get("final_status") == "rendered" else "running"
         )
-        summary_lines = [
-            f"final_status: {summary_payload.get('final_status', status)}",
-            f"completed_sections: {len(runtime.get('completed_sections', []))}",
-            f"needs_manual_review: {len(runtime.get('needs_manual_review', []))}",
-        ]
-        if active and active.error:
-            summary_lines.append(active.error)
+        latest_review = state_artifacts.get("last_aggregate_feedback") or {}
+        overview = RunOverviewResponse(
+            finalStatus=summary_payload.get("final_status", status),
+            contractState=(contract_payload.get("global_status") or {}).get("state", "unknown"),
+            completedSections=len(runtime.get("completed_sections", [])),
+            pendingSections=len(runtime.get("pending_sections", [])),
+            manualReviewCount=len(runtime.get("needs_manual_review", [])),
+            renderWarningCount=_count_validation_warnings(contract_payload),
+            evaluationOverallScore=summary_payload.get("evaluation_overall_score"),
+        )
+        latest_review_state = RunReviewStateResponse(
+            status=latest_review.get("status"),
+            nextAction=state_artifacts.get("next_action"),
+            issueCount=len(latest_review.get("issues", [])),
+            patchCount=len(latest_review.get("patches", [])),
+            deterministicChecks=latest_review.get("deterministic_checks", {}),
+        )
 
         started_at = active.started_at if active is not None else _format_mtime(output_dir)
         updated_at = (
@@ -257,7 +279,8 @@ class RunRepository:
             nextNode=runtime.get("next_node"),
             sections=sections,
             artifacts=self._build_artifacts(output_dir),
-            summary=summary_lines,
+            overview=overview,
+            latestReview=latest_review_state,
         )
 
     def _build_artifacts(self, output_dir: Path) -> list[RunArtifactResponse]:
@@ -302,6 +325,24 @@ class RunRepository:
                 label="Manuscript",
                 kind="manuscript",
                 content=manuscript_path.read_text(encoding="utf-8") if manuscript_path.exists() else "",
+            )
+        )
+        evaluation_path = output_dir / "logs" / "evaluation.json"
+        artifacts.append(
+            RunArtifactResponse(
+                id="evaluation",
+                label="Evaluation",
+                kind="evaluation",
+                content=evaluation_path.read_text(encoding="utf-8") if evaluation_path.exists() else "",
+            )
+        )
+        benchmark_path = output_dir / "logs" / "benchmark.json"
+        artifacts.append(
+            RunArtifactResponse(
+                id="benchmark",
+                label="Benchmark",
+                kind="benchmark",
+                content=benchmark_path.read_text(encoding="utf-8") if benchmark_path.exists() else "",
             )
         )
         log_files = [output_dir / "logs" / "run_summary.json", output_dir / "logs" / "run_state.json"]

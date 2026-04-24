@@ -19,8 +19,26 @@ export interface SectionState {
 export interface RunArtifact {
   id: string;
   label: string;
-  kind: "blueprint" | "contract" | "drafts" | "reviews" | "manuscript" | "logs";
+  kind: "blueprint" | "contract" | "drafts" | "reviews" | "manuscript" | "evaluation" | "benchmark" | "logs";
   content: string;
+}
+
+export interface RunOverview {
+  finalStatus: string;
+  contractState: string;
+  completedSections: number;
+  pendingSections: number;
+  manualReviewCount: number;
+  renderWarningCount: number;
+  evaluationOverallScore: number | null;
+}
+
+export interface RunReviewState {
+  status: string | null;
+  nextAction: string | null;
+  issueCount: number;
+  patchCount: number;
+  deterministicChecks: Record<string, string[]>;
 }
 
 export interface RunDetail extends RunItem {
@@ -29,5 +47,6 @@ export interface RunDetail extends RunItem {
   nextNode: string | null;
   sections: SectionState[];
   artifacts: RunArtifact[];
-  summary: string[];
+  overview: RunOverview;
+  latestReview: RunReviewState;
 }

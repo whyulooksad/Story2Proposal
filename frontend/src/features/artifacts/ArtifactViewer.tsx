@@ -2,9 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useUiStore } from "../../stores/uiStore";
 import type { RunArtifact, RunDetail } from "../../types/run";
+import { ArtifactInspector } from "./ArtifactInspector";
+import { BenchmarkArtifactView } from "./BenchmarkArtifactView";
+import { ContractArtifactView } from "./ContractArtifactView";
+import { EvaluationArtifactView } from "./EvaluationArtifactView";
+import { buildArtifactMap, buildArtifactFacts } from "./artifactUtils";
 
-function buildArtifactMap(artifacts: RunArtifact[]): Record<string, string> {
-  return Object.fromEntries(artifacts.map((artifact) => [artifact.kind, artifact.content]));
+function DefaultArtifactView({ artifact }: { artifact: RunArtifact }) {
+  const facts = buildArtifactFacts(artifact);
+  return <pre className="artifact-content artifact-content-main">{facts.preview}</pre>;
 }
 
 export function ArtifactViewer({ run }: { run: RunDetail }) {
@@ -53,6 +59,7 @@ export function ArtifactViewer({ run }: { run: RunDetail }) {
         </div>
         {run.status === "running" ? <div className="artifact-sync-note">运行中，仅高亮发生变化的产物</div> : null}
       </div>
+
       <div className="artifact-tabs">
         {run.artifacts.map((item) => {
           const changed = changedKinds.includes(item.kind);
@@ -69,8 +76,22 @@ export function ArtifactViewer({ run }: { run: RunDetail }) {
           );
         })}
       </div>
+
       {changedKinds.includes(artifact.kind) ? <div className="artifact-change-banner">当前产物有新的内容写入。</div> : null}
-      <pre className="artifact-content artifact-content-main">{artifact.content}</pre>
+
+      <div className="artifact-shell">
+        <ArtifactInspector artifact={artifact} />
+
+        {artifact.kind === "evaluation" ? (
+          <EvaluationArtifactView content={artifact.content} />
+        ) : artifact.kind === "benchmark" ? (
+          <BenchmarkArtifactView content={artifact.content} />
+        ) : artifact.kind === "contract" ? (
+          <ContractArtifactView content={artifact.content} />
+        ) : (
+          <DefaultArtifactView artifact={artifact} />
+        )}
+      </div>
     </section>
   );
 }

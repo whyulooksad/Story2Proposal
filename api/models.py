@@ -39,6 +39,28 @@ class SectionStateResponse(BaseModel):
     rewriteCount: int = 0
 
 
+class RunOverviewResponse(BaseModel):
+    """run 的核心运行概览。"""
+
+    finalStatus: str
+    contractState: str
+    completedSections: int
+    pendingSections: int
+    manualReviewCount: int
+    renderWarningCount: int
+    evaluationOverallScore: float | None = None
+
+
+class RunReviewStateResponse(BaseModel):
+    """最近一次 review cycle 的结构化状态。"""
+
+    status: str | None = None
+    nextAction: str | None = None
+    issueCount: int = 0
+    patchCount: int = 0
+    deterministicChecks: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class RunItemResponse(BaseModel):
     """run 列表页使用的轻量摘要。"""
 
@@ -58,4 +80,5 @@ class RunDetailResponse(RunItemResponse):
     nextNode: str | None = None
     sections: list[SectionStateResponse] = Field(default_factory=list)
     artifacts: list[RunArtifactResponse] = Field(default_factory=list)
-    summary: list[str] = Field(default_factory=list)
+    overview: RunOverviewResponse
+    latestReview: RunReviewStateResponse = Field(default_factory=RunReviewStateResponse)

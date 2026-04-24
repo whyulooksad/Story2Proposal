@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-type ArtifactTab = "blueprint" | "contract" | "drafts" | "reviews" | "manuscript" | "logs";
+type ArtifactTab = "blueprint" | "contract" | "drafts" | "reviews" | "manuscript" | "evaluation" | "benchmark" | "logs";
 
 interface UiState {
   activeArtifact: ArtifactTab;

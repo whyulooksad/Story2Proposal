@@ -96,12 +96,11 @@
   ],
   "metadata": {
     "target_venue": "arXiv",
-    "language": "en",
-    "active_sections": [
-      "title",
-      "abstract",
-      "introduction",
-      "method"
-    ]
+    "writing_language": "zh",
+    "paper_type": "",
+    "domain": "",
+    "expected_sections": [],
+    "keywords": [],
+    "notes": ""
   }
 }

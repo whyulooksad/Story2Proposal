@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from config import DEFAULT_MODEL, OUTPUTS_DIR
-from domain import build_initial_context, persist_run_outputs
+from domain import build_initial_context, evaluate_and_store_manuscript, persist_run_outputs
 from graph import build_story2proposal_graph
 from schemas import ResearchStory
 
@@ -52,6 +52,9 @@ async def run_story_to_proposal(
     finally:
         # 这里关闭的是整张应用图共享的 MCP manager。
         await graph._mcp_manager.close()
+
+    if context.get("artifacts", {}).get("rendered") is not None:
+        evaluate_and_store_manuscript(context)
 
     summary = persist_run_outputs(context)
     return {"context": context, "summary": summary}

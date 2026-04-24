@@ -19,6 +19,7 @@ class SectionPlan(BaseModel):
     visual_refs: list[str] = Field(default_factory=list)
     citation_refs: list[str] = Field(default_factory=list)
     input_dependencies: list[str] = Field(default_factory=list)
+    source_story_fields: list[str] = Field(default_factory=list)
 
 
 class VisualPlan(BaseModel):
@@ -29,6 +30,7 @@ class VisualPlan(BaseModel):
     caption_brief: str
     target_sections: list[str] = Field(default_factory=list)
     semantic_role: str
+    source_evidence_ids: list[str] = Field(default_factory=list)
 
 
 class ManuscriptBlueprint(BaseModel):

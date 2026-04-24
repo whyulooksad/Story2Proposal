@@ -1,14 +1,11 @@
 from .contracts import apply_contract_patches, initialize_contract, snapshot_contract, trim_blueprint_to_sections
+from .evaluation import evaluate_manuscript_bundle, evaluate_primary_report
 from .rendering import render_markdown_manuscript
 from .review import (
     aggregate_current_feedback,
     apply_review_cycle,
-    validate_citation_slots,
-    validate_section_coverage,
-    validate_visual_references,
 )
 from .state import (
-    DEFAULT_SECTION_ORDER,
     append_review,
     build_run_summary,
     persist_run_outputs,
@@ -21,17 +18,31 @@ from .state import (
     save_section_draft,
     set_blueprint_and_contract,
     store_refiner_output,
+    store_benchmark_output,
     store_render_output,
+    store_evaluation_output,
+    evaluate_and_store_manuscript,
+)
+from .validation import (
+    aggregate_feedback,
+    validate_citation_slots,
+    validate_data_fidelity,
+    validate_render_output,
+    validate_section_coverage,
+    validate_visual_references,
 )
 
 __all__ = [
-    "DEFAULT_SECTION_ORDER",
     "aggregate_current_feedback",
+    "aggregate_feedback",
     "append_review",
     "apply_contract_patches",
     "apply_review_cycle",
     "build_initial_context",
     "build_run_summary",
+    "evaluate_and_store_manuscript",
+    "evaluate_manuscript_bundle",
+    "evaluate_primary_report",
     "get_current_draft",
     "get_current_reviews",
     "get_current_section_contract",
@@ -44,9 +55,13 @@ __all__ = [
     "set_blueprint_and_contract",
     "snapshot_contract",
     "store_refiner_output",
+    "store_evaluation_output",
+    "store_benchmark_output",
     "store_render_output",
     "trim_blueprint_to_sections",
     "validate_citation_slots",
+    "validate_data_fidelity",
+    "validate_render_output",
     "validate_section_coverage",
     "validate_visual_references",
 ]

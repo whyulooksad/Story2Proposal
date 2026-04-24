@@ -12,29 +12,22 @@ from pathlib import Path
 from typing import Any
 
 from llm_io import json_dumps
+from .contracts import apply_contract_patches
+from .rendering import build_bibliography_block
+from .validation import finalize_contract_after_render
 from schemas import (
+    BenchmarkSuiteReport,
+    ContractPatch,
     EvaluationFeedback,
+    ManuscriptEvaluationReport,
     ManuscriptBlueprint,
     ManuscriptContract,
     RefinerOutput,
     RenderedManuscript,
     ResearchStory,
-    RevisionRecord,
     SectionDraft,
 )
-
-
-DEFAULT_SECTION_ORDER = [
-    "title",
-    "abstract",
-    "introduction",
-    "method",
-    "experiments",
-    "results_discussion",
-    "related_work",
-    "limitations",
-    "conclusion",
-]
+from .evaluation import evaluate_manuscript_bundle
 
 
 def get_writing_language(context: dict[str, Any]) -> str:
@@ -122,6 +115,12 @@ def persist_run_state(context: dict[str, Any]) -> None:
             rendered.get("latex", ""),
             encoding="utf-8",
         )
+    evaluation = context.get("artifacts", {}).get("evaluation")
+    if evaluation is not None:
+        write_json(output_dir / "logs" / "evaluation.json", evaluation)
+    benchmark = context.get("artifacts", {}).get("benchmark")
+    if benchmark is not None:
+        write_json(output_dir / "logs" / "benchmark.json", benchmark)
     write_json(
         output_dir / "logs" / "run_state.json",
         {
@@ -139,6 +138,7 @@ def build_run_summary(context: dict[str, Any]) -> dict[str, Any]:
     runtime = context.get("runtime", {})
     rendered = context.get("artifacts", {}).get("rendered", {})
     output_dir = context.get("artifacts", {}).get("output_dir")
+    evaluation = context.get("artifacts", {}).get("evaluation", {})
     return {
         "run_id": context.get("run_id"),
         "final_status": runtime.get("final_status"),
@@ -146,6 +146,8 @@ def build_run_summary(context: dict[str, Any]) -> dict[str, Any]:
         "rewrite_count": runtime.get("rewrite_count", {}),
         "needs_manual_review": runtime.get("needs_manual_review", []),
         "render_warnings": rendered.get("warnings", []),
+        "evaluation_overall_score": evaluation.get("overall_score"),
+        "evaluation_risks": evaluation.get("risks", []),
         "output_dir": output_dir,
     }
 
@@ -194,6 +196,32 @@ def get_current_reviews(context: dict[str, Any]) -> list[dict[str, Any]]:
     return list(context.get("reviews", {}).get(current_section_id, []))
 
 
+def _build_section_obligation_summary(section: dict[str, Any] | None) -> dict[str, Any]:
+    """为 writer/evaluator 构造更紧凑的 section obligation 摘要。"""
+    if not section:
+        return {}
+    return {
+        "section_id": section.get("section_id"),
+        "purpose": section.get("purpose"),
+        "required_claim_ids": section.get("required_claim_ids", []),
+        "required_evidence_ids": section.get("required_evidence_ids", []),
+        "required_visual_ids": section.get("required_visual_ids", []),
+        "required_citation_ids": section.get("required_citation_ids", []),
+        "source_story_fields": section.get("source_story_fields", []),
+        "claim_requirements": [
+            {
+                "claim_id": item.get("claim_id"),
+                "evidence_ids": item.get("evidence_ids", []),
+                "citation_ids": item.get("citation_ids", []),
+                "source_story_fields": item.get("source_story_fields", []),
+            }
+            for item in section.get("claim_requirements", [])
+        ],
+        "visual_obligations": section.get("visual_obligations", []),
+        "citation_obligations": section.get("citation_obligations", []),
+    }
+
+
 def refresh_prompt_views(context: dict[str, Any]) -> dict[str, Any]:
     """刷新从共享状态投影出来的 prompt 视图。"""
     story = context.get("story")
@@ -209,6 +237,9 @@ def refresh_prompt_views(context: dict[str, Any]) -> dict[str, Any]:
     context["blueprint_json"] = json_dumps(blueprint or {})
     context["contract_json"] = json_dumps(contract or {})
     context["current_section_contract_json"] = json_dumps(current_section or {})
+    context["current_section_obligation_summary_json"] = json_dumps(
+        _build_section_obligation_summary(current_section)
+    )
     context["current_draft_json"] = json_dumps(current_draft or {})
     context["current_reviews_json"] = json_dumps(current_reviews)
     context["writing_language"] = writing_language
@@ -220,6 +251,13 @@ def refresh_prompt_views(context: dict[str, Any]) -> dict[str, Any]:
     context["completed_section_summaries_json"] = json_dumps(
         {
             section_id: draft.get("content", "")[:500]
+            for section_id, draft in context.get("drafts", {}).items()
+            if section_id in set(context.get("runtime", {}).get("completed_sections", []))
+        }
+    )
+    context["completed_section_drafts_json"] = json_dumps(
+        {
+            section_id: draft
             for section_id, draft in context.get("drafts", {}).items()
             if section_id in set(context.get("runtime", {}).get("completed_sections", []))
         }
@@ -240,6 +278,9 @@ def set_blueprint_and_contract(
     context["runtime"]["completed_sections"] = []
     context["runtime"]["current_section_id"] = writing_order[0] if writing_order else None
     context["runtime"]["rewrite_count"] = {section_id: 0 for section_id in writing_order}
+    context["contract"]["global_status"]["current_section_id"] = context["runtime"]["current_section_id"]
+    context["contract"]["global_status"]["pending_sections"] = writing_order
+    context["contract"]["global_status"]["completed_sections"] = []
     context["artifacts"]["contract_init"] = deepcopy(context["contract"])
     refresh_prompt_views(context)
     persist_run_state(context)
@@ -259,7 +300,26 @@ def save_section_draft(context: dict[str, Any], draft: SectionDraft) -> dict[str
             section["latest_draft_version"] = version
             section["status"] = "drafted"
             section["draft_path"] = f"drafts/{section_id}_v{version}.md"
+            for requirement in section.get("claim_requirements", []):
+                if requirement["claim_id"] in draft.covered_claim_ids:
+                    requirement["coverage_status"] = "covered"
             break
+    for artifact in context.get("contract", {}).get("visuals", []):
+        if artifact["artifact_id"] in draft.referenced_visual_ids:
+            if section_id not in artifact["resolved_references"]:
+                artifact["resolved_references"].append(section_id)
+            artifact["render_status"] = "registered"
+    for citation in context.get("contract", {}).get("citations", []):
+        if citation["citation_id"] in draft.referenced_citation_ids:
+            citation["status"] = "used"
+            for trace in draft.evidence_traces:
+                if citation["citation_id"] not in trace.citation_ids:
+                    continue
+                for claim_id in trace.supports_claim_ids:
+                    if claim_id not in citation["grounded_claim_ids"]:
+                        citation["grounded_claim_ids"].append(claim_id)
+    context["contract"]["global_status"]["state"] = "drafted"
+    context["contract"]["global_status"]["current_section_id"] = section_id
     refresh_prompt_views(context)
     persist_run_state(context)
     return context
@@ -285,6 +345,32 @@ def store_refiner_output(context: dict[str, Any], output: RefinerOutput) -> dict
     context["artifacts"]["refiner_output"] = output.model_dump(mode="json")
     if output.abstract_override:
         context["artifacts"]["abstract_override"] = output.abstract_override
+    for item in context.get("contract", {}).get("glossary", []):
+        preferred = output.terminology_updates.get(item["term"])
+        if preferred:
+            item["preferred_form"] = preferred
+    if output.contract_patches:
+        context["contract"] = apply_contract_patches(
+            context["contract"],
+            [ContractPatch.model_validate(item).model_dump(mode="json") for item in output.contract_patches],
+        )
+    if output.section_rewrites or output.rewrite_goals:
+        context["contract"]["revision_log"].append(
+            {
+                "revision_id": f"refiner_{len(context['contract']['revision_log']) + 1}",
+                "stage": "global_refinement",
+                "agent": "refiner",
+                "summary": "; ".join(output.rewrite_goals) or "Applied global rewrite before final rendering.",
+                "affected_sections": sorted(
+                    rewrite.section_id
+                    for rewrite in output.section_rewrites
+                ),
+                "affected_artifacts": [],
+                "patch_types": ["section_rewrite"],
+                "contract_version": context["contract"].get("version", 1),
+            }
+        )
+    context["contract"]["global_status"]["state"] = "refined"
     refresh_prompt_views(context)
     persist_run_state(context)
     return context
@@ -294,6 +380,38 @@ def store_render_output(context: dict[str, Any], rendered: RenderedManuscript) -
     """保存最终渲染产物，并把运行状态标记为完成。"""
     context["artifacts"]["rendered"] = rendered.model_dump(mode="json")
     context["runtime"]["final_status"] = "rendered"
+    validation = rendered.validation.model_dump(mode="json")
+    context["contract"] = finalize_contract_after_render(
+        context["contract"],
+        [section.model_dump(mode="json") for section in rendered.finalized_sections],
+        build_bibliography_block(context),
+        rendered.validation,
+    )
+    context["contract"]["global_status"]["state"] = "rendered"
+    context["contract"]["global_status"]["warnings"] = list(validation.get("warnings", []))
     refresh_prompt_views(context)
     persist_run_state(context)
     return context
+
+
+def store_evaluation_output(context: dict[str, Any], evaluation: ManuscriptEvaluationReport) -> dict[str, Any]:
+    """保存整篇稿件的结构化评测结果。"""
+    context["artifacts"]["evaluation"] = evaluation.model_dump(mode="json")
+    refresh_prompt_views(context)
+    persist_run_state(context)
+    return context
+
+
+def store_benchmark_output(context: dict[str, Any], benchmark: BenchmarkSuiteReport) -> dict[str, Any]:
+    """保存整篇稿件的 benchmark suite 结果。"""
+    context["artifacts"]["benchmark"] = benchmark.model_dump(mode="json")
+    refresh_prompt_views(context)
+    persist_run_state(context)
+    return context
+
+
+def evaluate_and_store_manuscript(context: dict[str, Any]) -> dict[str, Any]:
+    """在最终稿生成后执行整篇稿件评测。"""
+    evaluation, benchmark = evaluate_manuscript_bundle(context)
+    store_evaluation_output(context, evaluation)
+    return store_benchmark_output(context, benchmark)

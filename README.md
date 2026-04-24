@@ -38,8 +38,8 @@
     |   |-- reasoning_evaluator
     |   |   |-- 检查论证和 claim / evidence 对齐
     |   |
-    |   |-- structure_evaluator
-    |   |   |-- 检查章节结构、段落组织和衔接
+    |   |-- data_fidelity_evaluator
+    |   |   |-- 检查 claim、evidence 和 experiment 是否真的对齐
     |   |
     |   |-- visual_evaluator
     |   |   |-- 检查图表和 visual 使用情况
@@ -98,7 +98,7 @@ Story2Proposal/
 │   ├── architect.md
 │   ├── section_writer.md
 │   ├── reasoning_evaluator.md
-│   ├── structure_evaluator.md
+│   ├── data_fidelity_evaluator.md
 │   ├── visual_evaluator.md
 │   ├── review_controller.md
 │   ├── refiner.md

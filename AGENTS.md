@@ -7,7 +7,7 @@ The agents here refer to the business roles inside the application graph, for ex
 - `architect`
 - `section_writer`
 - `reasoning_evaluator`
-- `structure_evaluator`
+- `data_fidelity_evaluator`
 - `visual_evaluator`
 - `review_controller`
 - `refiner`
@@ -128,9 +128,9 @@ The priority is not decorative writing, but:
 
 Responsible for checking whether the reasoning holds, whether the narrative is coherent, and whether claims match the evidence.
 
-### `structure_evaluator`
+### `data_fidelity_evaluator`
 
-Responsible for checking section organization, paragraph structure, transitions, and paper-structure quality.
+Responsible for checking whether claims, experiments, evidence traces, and citations are faithfully aligned with the source story and with each other.
 
 ### `visual_evaluator`
 
@@ -149,8 +149,9 @@ Responsible for deciding, based on the aggregated review state, whether the curr
 Responsible for global consolidation after the local sections are complete, for example:
 
 - abstract refinement
-- tightening global phrasing
-- adding section notes
+- section-level global rewrites when whole-paper coherence requires them
+- harmonizing terminology and visual explanation style
+- strengthening global contract constraints when needed
 
 ### `renderer`
 
@@ -221,6 +222,7 @@ When you are in a global phase such as `refiner` or `renderer`:
 - treat whole-paper consistency as the first priority
 - do not lightly break local structures that already passed section review
 - base your consolidation on existing drafts / contract / review results
+- do not directly reopen section-level rewriting loops unless the workflow explicitly sends the manuscript back
 - make the final manuscript feel like the natural convergence of the earlier states
 
 ## 9. What You Should Not Do

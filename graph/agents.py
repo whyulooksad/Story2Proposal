@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-"""Story2Proposal 应用层 Agent 定义。
-
-这一层只负责声明图里有哪些 Agent、各自使用哪个 prompt，
-以及它们在生命周期的哪个阶段挂接应用层 Hook。
-"""
+"""Story2Proposal 应用层 Agent 定义。"""
 
 import sys
 
@@ -43,19 +39,7 @@ def _make_agent(
 
 
 def build_agents(model: str) -> dict[str, Agent]:
-    """构造 Story2Proposal 流程中所有静态 Agent 节点。
-
-    各个 Agent 的职责如下：
-
-    - architect: 根据输入 story 生成论文 blueprint
-    - section_writer: 按当前章节 contract 生成章节草稿
-    - reasoning_evaluator: 从论证和逻辑角度评审草稿
-    - structure_evaluator: 从结构和组织角度评审草稿
-    - visual_evaluator: 从图表和可视化角度评审草稿
-    - review_controller: 聚合评审结果并决定下一跳
-    - refiner: 在全部章节完成后做全局润色
-    - renderer: 生成最终 markdown / latex 稿件
-    """
+    """构造 Story2Proposal 流程中所有静态 Agent 节点。"""
     return {
         "architect": _make_agent(
             "architect",
@@ -75,11 +59,11 @@ def build_agents(model: str) -> dict[str, Agent]:
             "reasoning_evaluator.md",
             on_end="mcp__s2p_workflow__capture_reasoning_feedback",
         ),
-        "structure_evaluator": _make_agent(
-            "structure_evaluator",
+        "data_fidelity_evaluator": _make_agent(
+            "data_fidelity_evaluator",
             model,
-            "structure_evaluator.md",
-            on_end="mcp__s2p_workflow__capture_structure_feedback",
+            "data_fidelity_evaluator.md",
+            on_end="mcp__s2p_workflow__capture_data_fidelity_feedback",
         ),
         "visual_evaluator": _make_agent(
             "visual_evaluator",
@@ -91,7 +75,6 @@ def build_agents(model: str) -> dict[str, Agent]:
             "review_controller",
             model,
             "review_controller.md",
-            # review_controller 进入前先聚合评审结果并决定下一跳。
             on_start="mcp__s2p_workflow__apply_review_cycle",
         ),
         "refiner": _make_agent(
@@ -104,7 +87,6 @@ def build_agents(model: str) -> dict[str, Agent]:
             "renderer",
             model,
             "renderer.md",
-            # renderer 不再让模型补写终稿，而是在启动时直接渲染最终产物。
             on_start="mcp__s2p_workflow__render_and_finalize",
         ),
     }
