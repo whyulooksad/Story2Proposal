@@ -3,6 +3,7 @@ from __future__ import annotations
 """API-side story persistence and process-based run lifecycle management."""
 
 import json
+import os
 import shutil
 import signal
 import subprocess
@@ -84,6 +85,48 @@ def _build_stop_payload(*, requested_at: str) -> dict[str, str]:
     }
 
 
+def _process_metadata_path(output_dir: Path) -> Path:
+    return output_dir / "logs" / "run_process.json"
+
+
+def _build_process_payload(
+    *,
+    run_id: str,
+    story_id: str,
+    model: str,
+    pid: int,
+    started_at: str,
+    stop_requested_at: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "run_id": run_id,
+        "story_id": story_id,
+        "model": model,
+        "pid": pid,
+        "started_at": started_at,
+        "stop_requested_at": stop_requested_at,
+    }
+
+
+def _is_pid_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout.strip()
+        return bool(output) and "No tasks are running" not in output
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
 def _build_summary_snapshot(output_dir: Path, *, final_status: str) -> dict[str, Any]:
     state_payload = _read_json_if_exists(output_dir / "logs" / "run_state.json") or {}
     runtime = state_payload.get("runtime", {})
@@ -108,8 +151,8 @@ def _load_error_message(output_dir: Path) -> str | None:
     if isinstance(error_payload, dict):
         return error_payload.get("message")
     summary_payload = _read_json_if_exists(output_dir / "logs" / "run_summary.json") or {}
-    if not summary_payload and (output_dir / "logs" / "run_state.json").exists():
-        return "Run metadata is incomplete. This run is not active in the current server process."
+    if summary_payload.get("final_status") == "failed":
+        return "Run ended before writing a complete final summary."
     return None
 
 
@@ -142,15 +185,21 @@ def _launch_run_process(story_path: Path, output_dir: Path, model: str) -> subpr
 def _terminate_process(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
         return
+    _terminate_pid(process.pid)
+
+
+def _terminate_pid(pid: int) -> None:
+    if pid <= 0:
+        return
     if sys.platform == "win32":
         subprocess.run(
-            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
             check=False,
             capture_output=True,
             text=True,
         )
     else:
-        process.send_signal(signal.SIGTERM)
+        os.kill(pid, signal.SIGTERM)
 
 
 @dataclass
@@ -197,15 +246,68 @@ class RunRepository:
     def _status_for_active(self, run: ActiveRun) -> str:
         return "stopping" if run.stop_requested_at else "running"
 
+    def _write_process_metadata(self, run: ActiveRun) -> None:
+        _write_json(
+            _process_metadata_path(run.output_dir),
+            _build_process_payload(
+                run_id=run.run_id,
+                story_id=run.story_id,
+                model=run.model,
+                pid=run.process.pid,
+                started_at=run.started_at,
+                stop_requested_at=run.stop_requested_at,
+            ),
+        )
+
+    def _load_process_metadata(self, output_dir: Path) -> dict[str, Any]:
+        payload = _read_json_if_exists(_process_metadata_path(output_dir))
+        return payload if isinstance(payload, dict) else {}
+
+    def _ensure_terminal_summary(self, output_dir: Path, *, final_status: str) -> dict[str, Any]:
+        summary_path = output_dir / "logs" / "run_summary.json"
+        summary_payload = _read_json_if_exists(summary_path) or {}
+        if summary_payload:
+            return summary_payload
+        summary_payload = _build_summary_snapshot(output_dir, final_status=final_status)
+        _write_json(summary_path, summary_payload)
+        return summary_payload
+
+    def _resolve_persisted_run_state(self, output_dir: Path) -> tuple[str, dict[str, Any]]:
+        summary_path = output_dir / "logs" / "run_summary.json"
+        summary_payload = _read_json_if_exists(summary_path) or {}
+        if summary_payload:
+            return _map_run_status(summary_payload.get("final_status")), summary_payload
+
+        process_payload = self._load_process_metadata(output_dir)
+        pid = int(process_payload.get("pid") or 0)
+        stop_requested_at = process_payload.get("stop_requested_at")
+        if pid and _is_pid_running(pid):
+            status = "stopping" if stop_requested_at else "running"
+            return status, summary_payload
+
+        has_partial_state = any(
+            path.exists()
+            for path in (
+                output_dir / "logs" / "run_state.json",
+                output_dir / "logs" / "error.json",
+                output_dir / "logs" / "stop.json",
+                _process_metadata_path(output_dir),
+            )
+        )
+        if has_partial_state:
+            final_status = "stopped" if stop_requested_at else "failed"
+            summary_payload = self._ensure_terminal_summary(output_dir, final_status=final_status)
+            return _map_run_status(summary_payload.get("final_status")), summary_payload
+
+        return "failed", summary_payload
+
     def _reconcile_active(self, run_id: str, active: ActiveRun) -> str:
         if active.process.poll() is None:
+            self._write_process_metadata(active)
             return self._status_for_active(active)
 
         final_status = "stopped" if active.stop_requested_at else ("failed" if active.process.returncode else "completed")
-        if final_status in {"stopped", "failed"}:
-            summary_path = active.output_dir / "logs" / "run_summary.json"
-            if not summary_path.exists():
-                _write_json(summary_path, _build_summary_snapshot(active.output_dir, final_status=final_status))
+        self._ensure_terminal_summary(active.output_dir, final_status=final_status)
 
         with self._lock:
             self._active_runs.pop(run_id, None)
@@ -226,10 +328,9 @@ class RunRepository:
                 if not any(path.exists() for path in (summary_path, state_path, error_path, stop_path)):
                     continue
 
-                summary = _read_json_if_exists(summary_path) or {}
+                status, summary = self._resolve_persisted_run_state(output_dir)
                 story_payload = _read_json_if_exists(output_dir / "input_story.json") or {}
                 story_id = story_payload.get("story_id", summary.get("run_id", output_dir.name).split("_20")[0])
-                status = _map_run_status(summary.get("final_status")) if summary_path.exists() else ("failed" if error_path.exists() else "failed")
                 latest_path = next((path for path in (summary_path, state_path, error_path, stop_path) if path.exists()), output_dir)
 
                 items[output_dir.name] = RunItemResponse(
@@ -297,6 +398,7 @@ class RunRepository:
         )
         with self._lock:
             self._active_runs[run_id] = active
+        self._write_process_metadata(active)
 
         return self.get(run_id)
 
@@ -304,8 +406,18 @@ class RunRepository:
         with self._lock:
             active = self._active_runs.get(run_id)
         if active is None:
-            if (OUTPUTS_DIR / run_id).exists():
-                raise RuntimeError("Run is not active in the current server process and cannot be stopped.")
+            output_dir = OUTPUTS_DIR / run_id
+            if output_dir.exists():
+                process_payload = self._load_process_metadata(output_dir)
+                pid = int(process_payload.get("pid") or 0)
+                if pid and _is_pid_running(pid):
+                    requested_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    process_payload["stop_requested_at"] = requested_at
+                    _write_json(_process_metadata_path(output_dir), process_payload)
+                    _write_json(output_dir / "logs" / "stop.json", _build_stop_payload(requested_at=requested_at))
+                    _terminate_pid(pid)
+                    return self.get(run_id)
+                raise RuntimeError("Run is no longer active.")
             raise FileNotFoundError(run_id)
         if active.process.poll() is not None:
             raise RuntimeError("Run is no longer active.")
@@ -315,6 +427,7 @@ class RunRepository:
         requested_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         active.stop_requested_at = requested_at
         active.updated_at = requested_at[:16]
+        self._write_process_metadata(active)
         _write_json(active.output_dir / "logs" / "stop.json", _build_stop_payload(requested_at=requested_at))
         _terminate_process(active.process)
         return self.get(run_id)
@@ -342,11 +455,7 @@ class RunRepository:
         elif not output_dir.exists():
             raise FileNotFoundError(run_id)
         else:
-            summary_payload = _read_json_if_exists(output_dir / "logs" / "run_summary.json") or {}
-            if summary_payload:
-                status = _map_run_status(summary_payload.get("final_status"))
-            else:
-                status = "failed" if (output_dir / "logs" / "run_state.json").exists() else "failed"
+            status, _ = self._resolve_persisted_run_state(output_dir)
 
         if not output_dir.exists():
             raise FileNotFoundError(run_id)
