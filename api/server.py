@@ -1,12 +1,6 @@
 from __future__ import annotations
 
-"""Story2Proposal API 入口。
-
-当前接口量很小，这一层直接在一个文件里定义路由就够了：
-- `server.py`：应用入口 + 路由
-- `repository.py`：文件读写和 run 管理
-- `models.py`：run 相关请求/响应模型
-"""
+"""Story2Proposal FastAPI entrypoint."""
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,25 +18,25 @@ runs = RunRepository()
 
 @router.get("/health")
 def health() -> dict[str, str]:
-    """最小健康检查接口。"""
+    """Small health-check endpoint."""
     return {"status": "ok"}
 
 
 @router.get("/stories", response_model=list[ResearchStory])
 def list_stories() -> list[ResearchStory]:
-    """返回 stories 目录中的全部 `ResearchStory`。"""
+    """Return all persisted stories."""
     return stories.list()
 
 
 @router.post("/stories", response_model=ResearchStory)
 def save_story(payload: ResearchStory) -> ResearchStory:
-    """保存或覆盖一份 `ResearchStory`。"""
+    """Persist a story."""
     return stories.save(payload)
 
 
 @router.delete("/stories/{story_id}", status_code=204)
 def delete_story(story_id: str) -> None:
-    """Delete a persisted story by its story id."""
+    """Delete a persisted story by story id."""
     try:
         stories.delete(story_id)
     except FileNotFoundError as exc:
@@ -51,19 +45,19 @@ def delete_story(story_id: str) -> None:
 
 @router.get("/runs", response_model=list[RunItemResponse])
 def list_runs() -> list[RunItemResponse]:
-    """返回当前可见的全部 run 摘要。"""
+    """Return all visible runs."""
     return runs.list()
 
 
 @router.post("/runs", response_model=RunDetailResponse)
 def create_run(payload: RunCreateRequest) -> RunDetailResponse:
-    """基于一份 `ResearchStory` 启动新的 run。"""
+    """Create a new run from one story."""
     return runs.create(payload.story, payload.model)
 
 
 @router.post("/runs/{run_id}/stop", response_model=RunDetailResponse)
 def stop_run(run_id: str) -> RunDetailResponse:
-    """Request a cooperative stop for a running run."""
+    """Stop a running run."""
     try:
         return runs.stop(run_id)
     except FileNotFoundError as exc:
@@ -85,7 +79,7 @@ def delete_run(run_id: str) -> None:
 
 @router.get("/runs/{run_id}", response_model=RunDetailResponse)
 def get_run(run_id: str) -> RunDetailResponse:
-    """返回某个 run 的详情状态和聚合产物。"""
+    """Return one run detail payload."""
     try:
         return runs.get(run_id)
     except FileNotFoundError as exc:
@@ -93,8 +87,11 @@ def get_run(run_id: str) -> RunDetailResponse:
 
 
 @router.get("/runs/{run_id}/file")
-def get_run_file(run_id: str, path: str = Query(..., description="Relative or absolute file path within the run output directory.")) -> FileResponse:
-    """Serve a generated run artifact file for frontend previews."""
+def get_run_file(
+    run_id: str,
+    path: str = Query(..., description="Relative or absolute file path within the run output directory."),
+) -> FileResponse:
+    """Serve one generated run artifact file."""
     try:
         resolved = runs.resolve_file(run_id, path)
     except FileNotFoundError as exc:
@@ -105,7 +102,7 @@ def get_run_file(run_id: str, path: str = Query(..., description="Relative or ab
 
 
 def create_app() -> FastAPI:
-    """创建并配置 FastAPI 应用。"""
+    """Create and configure the FastAPI app."""
     app = FastAPI(title="Story2Proposal API")
     app.add_middleware(
         CORSMiddleware,

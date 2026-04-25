@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Story2Proposal 应用层 Agent 定义。"""
+"""Story2Proposal agent definitions."""
 
 import sys
 
@@ -10,7 +10,7 @@ from config import PACKAGE_ROOT, load_mcp_server, load_prompt
 
 
 def workflow_server_config() -> dict[str, object]:
-    """返回 workflow MCP server 的启动配置。"""
+    """Return workflow MCP server launch config."""
     return {
         "command": sys.executable,
         "args": ["-m", "servers.workflow"],
@@ -19,7 +19,7 @@ def workflow_server_config() -> dict[str, object]:
 
 
 def drawio_server_config() -> dict[str, object] | None:
-    """返回 draw.io MCP server 配置；优先读取仓库内 `.mcp.json`。"""
+    """Return draw.io MCP config from repo-local `.mcp.json`."""
     return load_mcp_server("drawio")
 
 
@@ -32,8 +32,8 @@ def _make_agent(
     on_end: str | None = None,
     mcp_servers: dict[str, object] | None = None,
 ) -> Agent:
-    """按统一规则构造一个应用层 Agent。"""
-    hooks = []
+    """Construct one application-layer agent with shared conventions."""
+    hooks: list[Hook] = []
     if on_start is not None or on_end is not None:
         hooks.append(Hook(on_start=on_start, on_end=on_end))
     return Agent(
@@ -46,7 +46,7 @@ def _make_agent(
 
 
 def build_agents(model: str) -> dict[str, Agent]:
-    """构造 Story2Proposal 流程中的所有静态 Agent 节点。"""
+    """Build all static agents used in the Story2Proposal workflow."""
     drawio_config = drawio_server_config()
     return {
         "architect": _make_agent(

@@ -1,0 +1,83 @@
+{
+  "story": {
+    "story_id": "adaptive_graph_writer",
+    "title_hint": "Adaptive Graph Writer",
+    "topic": "Adaptive graph-based scientific writing",
+    "problem_statement": "Existing writing agents lack structured control over visuals.",
+    "motivation": "We want the section writer to generate real figures instead of placeholders.",
+    "core_idea": "Let the section writer use draw.io MCP to materialize required visuals.",
+    "method_summary": "Use a contract-driven section writer with explicit visual obligations.",
+    "contributions": [
+      "Real visual generation in section writing"
+    ],
+    "experiments": [],
+    "baselines": [],
+    "findings": [],
+    "limitations": [],
+    "references": [],
+    "assets": [],
+    "metadata": {
+      "writing_language": "en"
+    }
+  },
+  "section": {
+    "section_id": "method",
+    "title": "Method",
+    "purpose": "Describe the system pipeline and include the required overview figure.",
+    "required_claims": [],
+    "required_claim_ids": [],
+    "claim_requirements": [],
+    "required_evidence_ids": [],
+    "required_visual_ids": [
+      "fig_method_pipeline"
+    ],
+    "required_citation_ids": [],
+    "depends_on_sections": [],
+    "source_story_fields": [
+      "core_idea",
+      "method_summary"
+    ],
+    "visual_obligations": [
+      {
+        "artifact_id": "fig_method_pipeline",
+        "required": true,
+        "explanation_required": true,
+        "placement_hint": "after the first paragraph",
+        "narrative_role": "pipeline overview"
+      }
+    ],
+    "citation_obligations": [],
+    "status": "pending",
+    "draft_path": null,
+    "latest_draft_version": 0
+  },
+  "visuals": [
+    {
+      "artifact_id": "fig_method_pipeline",
+      "kind": "figure",
+      "label": "Figure 1",
+      "canonical_label": "fig:method_pipeline",
+      "caption_brief": "Pipeline overview of the Story2Proposal writing system.",
+      "semantic_role": "pipeline overview",
+      "source_evidence_ids": [],
+      "target_sections": [
+        "method"
+      ],
+      "placement_hint": "after the first paragraph",
+      "placement_constraint": "inline",
+      "occurrence_policy": "exactly_once",
+      "explanation_required": true,
+      "materialization_status": "planned",
+      "generator": null,
+      "source_path": null,
+      "rendered_path": null,
+      "thumbnail_path": null,
+      "object_map": [],
+      "resolved_references": [],
+      "render_status": "planned"
+    }
+  ],
+  "model": "qwen-plus",
+  "mode": "compose",
+  "plan": {}
+}

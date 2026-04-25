@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-"""API 层请求/响应模型。
-
-这里定义的是 HTTP 接口契约，不是领域层的完整业务实现。
-其中 story 直接复用了领域模型 `ResearchStory`，run 相关的响应则在这里单独定义。
-"""
+"""HTTP request and response models for the main Story2Proposal API."""
 
 from pydantic import BaseModel, Field
 
@@ -13,16 +9,14 @@ from schemas import ResearchStory
 
 
 class RunCreateRequest(BaseModel):
-    """创建 run 的请求体。"""
+    """Request body for creating a run."""
 
-    # 前端直接提交一份完整的 `ResearchStory`。
     story: ResearchStory
-    # 当前版本整条图共享同一个 model 配置。
     model: str = DEFAULT_MODEL
 
 
 class RunArtifactResponse(BaseModel):
-    """返回给前端的单个 artifact 载荷。"""
+    """One run artifact returned to the frontend."""
 
     id: str
     label: str
@@ -31,7 +25,7 @@ class RunArtifactResponse(BaseModel):
 
 
 class SectionStateResponse(BaseModel):
-    """run 详情页里每个 section 的状态摘要。"""
+    """Section status summary used by the run detail page."""
 
     id: str
     title: str
@@ -40,7 +34,7 @@ class SectionStateResponse(BaseModel):
 
 
 class RunOverviewResponse(BaseModel):
-    """run 的核心运行概览。"""
+    """High-level run overview."""
 
     finalStatus: str
     contractState: str
@@ -52,7 +46,7 @@ class RunOverviewResponse(BaseModel):
 
 
 class RunReviewStateResponse(BaseModel):
-    """最近一次 review cycle 的结构化状态。"""
+    """Structured state from the latest review cycle."""
 
     status: str | None = None
     nextAction: str | None = None
@@ -62,7 +56,7 @@ class RunReviewStateResponse(BaseModel):
 
 
 class RunItemResponse(BaseModel):
-    """run 列表页使用的轻量摘要。"""
+    """Lightweight run summary used in the run list."""
 
     id: str
     storyId: str
@@ -74,7 +68,7 @@ class RunItemResponse(BaseModel):
 
 
 class RunDetailResponse(RunItemResponse):
-    """run 详情页使用的完整响应。"""
+    """Full run detail response."""
 
     currentNode: str
     currentSectionId: str | None = None
