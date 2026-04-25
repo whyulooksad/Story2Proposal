@@ -87,7 +87,7 @@ export function ArtifactViewer({ run }: { run: RunDetail }) {
         ) : artifact.kind === "benchmark" ? (
           <BenchmarkArtifactView content={artifact.content} />
         ) : artifact.kind === "contract" ? (
-          <ContractArtifactView content={artifact.content} />
+          <ContractArtifactView content={artifact.content} runId={run.id} />
         ) : (
           <DefaultArtifactView artifact={artifact} />
         )}

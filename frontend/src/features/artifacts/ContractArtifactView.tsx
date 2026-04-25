@@ -15,7 +15,11 @@ function renderInlineList(items?: string[], emptyLabel = "暂无") {
   );
 }
 
-export function ContractArtifactView({ content }: { content: string }) {
+function buildRunFileUrl(runId: string, filePath: string) {
+  return `/api/runs/${encodeURIComponent(runId)}/file?path=${encodeURIComponent(filePath)}`;
+}
+
+export function ContractArtifactView({ content, runId }: { content: string; runId: string }) {
   const parsed = tryParseJson(content) as ContractPayload | null;
   if (!parsed || !parsed.sections) {
     return <pre className="artifact-content artifact-content-main">{content}</pre>;
@@ -126,26 +130,49 @@ export function ContractArtifactView({ content }: { content: string }) {
           </div>
           <div className="contract-list">
             {visuals.length ? (
-              visuals.map((visual) => (
-                <div className="contract-list-item" key={visual.artifact_id}>
-                  <div className="contract-list-title">{visual.label ?? visual.artifact_id}</div>
-                  <div className="contract-list-subtle">
-                    {visual.kind ?? "visual"} · {visual.semantic_role ?? "未说明角色"}
+              visuals.map((visual) => {
+                const previewPath = visual.thumbnail_path || visual.rendered_path;
+                const previewUrl = previewPath ? buildRunFileUrl(runId, previewPath) : null;
+                const objectCount = visual.object_map?.length ?? 0;
+                return (
+                  <div className="contract-list-item contract-visual-item" key={visual.artifact_id}>
+                    <div className="contract-list-title">{visual.label ?? visual.artifact_id}</div>
+                    <div className="contract-list-subtle">
+                      {visual.kind ?? "visual"} · {visual.semantic_role ?? "未说明角色"}
+                    </div>
+                    <div className="contract-list-subtle">
+                      {visual.placement_constraint ?? "unspecified"} · {visual.render_status ?? "planned"}
+                    </div>
+                    <div className="contract-list-subtle">
+                      materialization：{visual.materialization_status ?? "planned"} · {visual.generator ?? "未指定"}
+                    </div>
+                    {previewUrl ? (
+                      <div className="contract-visual-preview">
+                        <img src={previewUrl} alt={visual.label ?? visual.artifact_id} loading="lazy" />
+                      </div>
+                    ) : (
+                      <div className="contract-empty">尚未生成可预览的图</div>
+                    )}
+                    {visual.rendered_path ? (
+                      <a
+                        className="contract-file-link"
+                        href={buildRunFileUrl(runId, visual.rendered_path)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        打开渲染文件
+                      </a>
+                    ) : null}
+                    {visual.source_path ? (
+                      <div className="contract-list-subtle">源文件：{visual.source_path}</div>
+                    ) : null}
+                    <div className="contract-list-subtle">对象映射：{objectCount}</div>
+                    {visual.target_sections?.length ? (
+                      <div className="contract-list-subtle">目标章节：{visual.target_sections.join("、")}</div>
+                    ) : null}
                   </div>
-                  <div className="contract-list-subtle">
-                    {visual.placement_constraint ?? "unspecified"} · {visual.render_status ?? "planned"}
-                  </div>
-                  <div className="contract-list-subtle">
-                    materialization：{visual.materialization_status ?? "planned"} · {visual.generator ?? "未指定"}
-                  </div>
-                  {visual.rendered_path ? (
-                    <div className="contract-list-subtle">文件：{visual.rendered_path}</div>
-                  ) : null}
-                  {visual.target_sections?.length ? (
-                    <div className="contract-list-subtle">目标章节：{visual.target_sections.join("、")}</div>
-                  ) : null}
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="contract-empty">暂无 visual 约束</div>
             )}

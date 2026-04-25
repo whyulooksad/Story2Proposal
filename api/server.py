@@ -8,8 +8,9 @@ from __future__ import annotations
 - `models.py`：run 相关请求/响应模型
 """
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from schemas import ResearchStory
 
@@ -89,6 +90,18 @@ def get_run(run_id: str) -> RunDetailResponse:
         return runs.get(run_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"Run not found: {run_id}") from exc
+
+
+@router.get("/runs/{run_id}/file")
+def get_run_file(run_id: str, path: str = Query(..., description="Relative or absolute file path within the run output directory.")) -> FileResponse:
+    """Serve a generated run artifact file for frontend previews."""
+    try:
+        resolved = runs.resolve_file(run_id, path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"Run file not found: {path}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FileResponse(resolved)
 
 
 def create_app() -> FastAPI:

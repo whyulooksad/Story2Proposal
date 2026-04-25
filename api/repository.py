@@ -445,6 +445,21 @@ class RunRepository:
         with self._lock:
             self._active_runs.pop(run_id, None)
 
+    def resolve_file(self, run_id: str, file_path: str) -> Path:
+        output_dir = OUTPUTS_DIR / run_id
+        if not output_dir.exists():
+            raise FileNotFoundError(run_id)
+        candidate = Path(file_path)
+        resolved = candidate if candidate.is_absolute() else (output_dir / candidate)
+        try:
+            normalized = resolved.resolve(strict=True)
+            output_root = output_dir.resolve(strict=True)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(file_path) from exc
+        if output_root not in normalized.parents and normalized != output_root:
+            raise RuntimeError("Requested file is outside the run output directory.")
+        return normalized
+
     def get(self, run_id: str) -> RunDetailResponse:
         output_dir = OUTPUTS_DIR / run_id
         with self._lock:

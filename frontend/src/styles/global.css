@@ -1338,6 +1338,31 @@ dd {
   line-height: 1.6;
 }
 
+.contract-visual-item {
+  gap: 10px;
+}
+
+.contract-visual-preview {
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.contract-visual-preview img {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  background: #fff;
+}
+
+.contract-file-link {
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
 .compact-tall {
   min-height: 680px;
 }

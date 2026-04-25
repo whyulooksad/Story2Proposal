@@ -81,10 +81,13 @@ export type ContractPayload = {
     semantic_role?: string;
     materialization_status?: string;
     generator?: string;
+    source_path?: string;
     rendered_path?: string;
+    thumbnail_path?: string;
     placement_constraint?: string;
     render_status?: string;
     target_sections?: string[];
+    object_map?: Array<Record<string, unknown>>;
   }>;
   citations?: Array<{
     citation_id: string;
