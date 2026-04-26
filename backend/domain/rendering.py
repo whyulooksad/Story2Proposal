@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Story2Proposal 的最终渲染与确定性校验。"""
+"""Story2Proposal 的最终渲染与确定性校验。
+
+这个模块把前面阶段收敛好的结构化产物装配成最终 manuscript。
+"""
 
 import re
 from typing import Any

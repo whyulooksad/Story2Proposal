@@ -2,9 +2,8 @@ from __future__ import annotations
 
 """Story2Proposal 的输入故事模型。
 
-这一层定义系统的原始研究素材，包括研究问题、方法、实验、参考文献
-和潜在视觉资产。后续的 blueprint、contract 和 drafts 都以这里的对象
-为事实来源。
+这一层定义系统的原始研究素材，包括研究问题、方法、实验、参考文献和潜在视觉资产。
+后续的 blueprint、contract 和 drafts 都以这里的对象为事实来源。
 """
 
 from pathlib import Path

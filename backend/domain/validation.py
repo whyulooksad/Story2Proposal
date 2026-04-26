@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Story2Proposal 的确定性校验逻辑。"""
+"""Story2Proposal 的确定性校验逻辑。
+
+这个模块实现不依赖模型自评的结构化检查，用于章节评审和最终渲染校验。
+"""
 
 import re
 from collections import Counter

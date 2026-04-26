@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Visual artifact rendering pipeline and integrity checks."""
+"""Story2Proposal 的视觉产物物化与完整性检查。
+
+这个模块负责把章节草稿中登记的 visual artifact 规范化为输出目录里的真实文件，并在评审阶段检查这些产物是否完整可用。
+"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,11 +14,13 @@ from backend.schemas.draft import VisualArtifactMaterialization
 
 @dataclass(frozen=True)
 class VisualArtifactContext:
+    """视觉产物处理阶段共享的上下文。"""
     output_dir: Path
 
 
 @dataclass(frozen=True)
 class VisualArtifactFiles:
+    """一个视觉产物可能涉及的源文件与渲染文件集合。"""
     source_file: Path | None
     rendered_file: Path | None
     thumbnail_file: Path | None
@@ -25,7 +30,7 @@ Renderer = Callable[[VisualArtifactContext, VisualArtifactMaterialization, Visua
 
 
 def normalize_svg_markup(svg_text: str) -> str:
-    """Normalize SVG markup into a browser-friendly standalone document."""
+    """把 SVG 标记归一化为可直接展示的独立文档。"""
     normalized = svg_text.lstrip("\ufeff").strip()
     if not normalized.startswith("<svg"):
         return normalized
@@ -38,6 +43,7 @@ def normalize_svg_markup(svg_text: str) -> str:
 
 
 def _resolve_within_output_dir(context: VisualArtifactContext, path_value: str | None) -> Path | None:
+    """把路径解析为 output_dir 内的绝对路径。"""
     if not path_value:
         return None
     candidate = Path(path_value)
@@ -50,12 +56,14 @@ def _resolve_within_output_dir(context: VisualArtifactContext, path_value: str |
 
 
 def _to_relative_output_path(context: VisualArtifactContext, path: Path | None) -> str | None:
+    """把绝对路径转换成相对 output_dir 的存储路径。"""
     if path is None:
         return None
     return path.resolve().relative_to(context.output_dir).as_posix()
 
 
 def _resolve_files(context: VisualArtifactContext, artifact: VisualArtifactMaterialization) -> VisualArtifactFiles:
+    """解析一个视觉产物关联的所有文件路径。"""
     return VisualArtifactFiles(
         source_file=_resolve_within_output_dir(context, artifact.source_path),
         rendered_file=_resolve_within_output_dir(context, artifact.rendered_path),
@@ -64,6 +72,7 @@ def _resolve_files(context: VisualArtifactContext, artifact: VisualArtifactMater
 
 
 def _require_existing_file(path: Path | None, *, label: str, artifact_id: str) -> Path:
+    """确保指定文件存在，否则抛出带 artifact_id 的错误。"""
     if path is None:
         raise ValueError(f"{artifact_id}: missing {label} path")
     if not path.exists() or not path.is_file():
@@ -76,6 +85,7 @@ def _render_drawio_artifact(
     artifact: VisualArtifactMaterialization,
     files: VisualArtifactFiles,
 ) -> VisualArtifactMaterialization:
+    """把 draw.io 产物规范化并写入最终渲染目录。"""
     source_candidate = files.source_file or files.rendered_file
     source_file = _require_existing_file(source_candidate, label="drawio source", artifact_id=artifact.artifact_id)
 
@@ -102,6 +112,7 @@ def _passthrough_artifact(
     artifact: VisualArtifactMaterialization,
     files: VisualArtifactFiles,
 ) -> VisualArtifactMaterialization:
+    """直接复用已有文件路径的通用物化逻辑。"""
     rendered_file = files.rendered_file or files.source_file
     rendered_file = _require_existing_file(rendered_file, label="rendered", artifact_id=artifact.artifact_id)
     source_file = files.source_file if files.source_file and files.source_file.exists() else rendered_file
@@ -122,6 +133,7 @@ RENDERERS: dict[str, Renderer] = {
 
 
 def materialize_visual_artifact(output_dir: Path, artifact: VisualArtifactMaterialization) -> VisualArtifactMaterialization:
+    """物化单个视觉产物。"""
     context = VisualArtifactContext(output_dir=output_dir.resolve())
     files = _resolve_files(context, artifact)
     renderer = RENDERERS.get(artifact.generator.lower(), _passthrough_artifact)
@@ -132,10 +144,12 @@ def materialize_visual_artifacts(
     output_dir: Path,
     artifacts: list[VisualArtifactMaterialization],
 ) -> list[VisualArtifactMaterialization]:
+    """批量物化多个视觉产物。"""
     return [materialize_visual_artifact(output_dir, artifact) for artifact in artifacts]
 
 
 def validate_visual_artifact_integrity(output_dir: Path, artifacts: list[dict[str, object]]) -> list[str]:
+    """检查视觉产物 payload 和关联文件是否完整。"""
     context = VisualArtifactContext(output_dir=output_dir.resolve())
     issues: list[str] = []
     for payload in artifacts:

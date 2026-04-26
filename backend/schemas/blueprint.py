@@ -2,8 +2,8 @@ from __future__ import annotations
 
 """Story2Proposal 的论文蓝图模型。
 
-这一层定义 architect 阶段产出的高层写作规划，包括章节结构、视觉规划
-和整体写作顺序。它描述“准备怎么写”，但还不是执行期约束本身。
+这一层定义 architect 阶段产出的高层写作规划，包括章节结构、视觉规划和整体写作顺序。
+它描述“准备怎么写”，但还不是执行期约束本身。
 """
 
 from pydantic import BaseModel, Field

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Story2Proposal 的稿件评测与 benchmark suite。"""
+"""Story2Proposal 的稿件评测与 benchmark suite。
+
+这个模块负责对最终稿件进行结构化评测，并构造 baseline 对比结果。
+"""
 
 import re
 from copy import deepcopy
@@ -22,22 +25,27 @@ from .validation import validate_render_output
 
 
 def _normalize_text(text: str) -> str:
+    """把文本归一化，便于做弱匹配比较。"""
     return re.sub(r"\s+", " ", text or "").strip().lower()
 
 
 def _contains_phrase(text: str, phrase: str) -> bool:
+    """判断归一化后的文本中是否包含目标短语。"""
     return bool(phrase and _normalize_text(phrase) in _normalize_text(text))
 
 
 def _paragraphs(text: str) -> list[str]:
+    """按空行切分段落。"""
     return [item.strip() for item in re.split(r"\n\s*\n", text or "") if item.strip()]
 
 
 def _sentences(text: str) -> list[str]:
+    """按常见句末符号切分句子。"""
     return [item.strip() for item in re.split(r"[.!?。！？\n]+", text or "") if item.strip()]
 
 
 def _criterion(criterion_id: str, label: str, passed: bool, evidence: list[str]) -> EvaluationCriterion:
+    """构造一条评测准则对象。"""
     return EvaluationCriterion(
         criterion_id=criterion_id,
         label=label,
@@ -47,6 +55,7 @@ def _criterion(criterion_id: str, label: str, passed: bool, evidence: list[str])
 
 
 def _dimension(name: str, criteria: list[EvaluationCriterion], summary_evidence: list[str]) -> EvaluationDimension:
+    """根据多条准则结果构造一个评测维度。"""
     passed_count = sum(1 for criterion in criteria if criterion.passed)
     score = round(5.0 * passed_count / max(1, len(criteria)), 2)
     return EvaluationDimension(
@@ -59,6 +68,7 @@ def _dimension(name: str, criteria: list[EvaluationCriterion], summary_evidence:
 
 
 def _finalized_sections_from_context(context: dict[str, Any]) -> list[dict[str, Any]]:
+    """优先从 rendered 产物中读取 finalized sections。"""
     rendered = context.get("artifacts", {}).get("rendered", {})
     sections = rendered.get("finalized_sections") or []
     if sections:
@@ -83,6 +93,7 @@ def _finalized_sections_from_context(context: dict[str, Any]) -> list[dict[str, 
 
 
 def _draft_baseline_sections(context: dict[str, Any]) -> list[dict[str, Any]]:
+    """把原始章节 drafts 直接拼成一个 baseline section 集合。"""
     contract = context.get("contract") or {}
     drafts = context.get("drafts") or {}
     sections: list[dict[str, Any]] = []
@@ -102,10 +113,12 @@ def _draft_baseline_sections(context: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _section_map_from_sections(sections: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """把 section 列表按 section_id 建成查找表。"""
     return {section["section_id"]: section for section in sections}
 
 
 def _content_of(section_map: dict[str, dict[str, Any]], section_ids: list[str]) -> str:
+    """按给定 section_id 顺序拼接正文内容。"""
     return "\n\n".join(section_map.get(section_id, {}).get("content", "") for section_id in section_ids)
 
 
@@ -116,6 +129,7 @@ def _evaluate_protocol(
     *,
     protocol_version: str,
 ) -> ManuscriptEvaluationReport:
+    """按统一 rubric 评测一组 sections。"""
     story = context.get("story") or {}
     contract = context.get("contract") or {}
     drafts = context.get("drafts") or {}
@@ -472,6 +486,7 @@ def _build_candidate_report(
     source: str,
     sections: list[dict[str, Any]],
 ) -> BenchmarkCandidate:
+    """为一份候选稿件构造 benchmark 条目。"""
     candidate_context = deepcopy(context)
     candidate_context.setdefault("artifacts", {})
     bibliography = build_bibliography_block(candidate_context)
@@ -491,6 +506,7 @@ def _build_candidate_report(
 
 
 def _compare_candidates(candidate: BenchmarkCandidate, baseline: BenchmarkCandidate) -> BenchmarkComparison:
+    """比较候选稿件与 baseline 的维度分数差异。"""
     baseline_dimensions = {dimension.name: dimension for dimension in baseline.report.dimensions}
     candidate_dimensions = {dimension.name: dimension for dimension in candidate.report.dimensions}
     deltas: list[DimensionDelta] = []

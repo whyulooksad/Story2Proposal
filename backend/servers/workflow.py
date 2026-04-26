@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Story2Proposal workflow hook / MCP adapter layer."""
+"""Story2Proposal 的 workflow hook / MCP 适配层。
+
+这个文件负责把业务 Agent 的结构化输出解析后写回共享状态。
+"""
 
 from typing import Any
 
@@ -26,7 +29,7 @@ server = FastMCP("s2p_workflow")
 
 
 def _latest_agent_message(messages: list[dict[str, Any]], agent_name: str | None) -> str:
-    """Return the latest assistant message for a given agent."""
+    """返回指定 Agent 的最新 assistant 消息。"""
     for message in reversed(messages):
         if message.get("role") != "assistant":
             continue
@@ -39,17 +42,17 @@ def _latest_agent_message(messages: list[dict[str, Any]], agent_name: str | None
 
 
 def _agent_name(agent: dict[str, Any] | None) -> str | None:
-    """Extract the agent name from hook metadata."""
+    """从 hook 元数据中提取 Agent 名称。"""
     return (agent or {}).get("name")
 
 
 def _parse_agent_output(messages: list[dict[str, Any]], agent: dict[str, Any] | None, schema: type[Any]) -> Any:
-    """Parse the latest output of the current agent with a target schema."""
+    """按目标 schema 解析当前 Agent 的最新输出。"""
     return parse_model(_latest_agent_message(messages, _agent_name(agent)), schema)
 
 
 def _store_feedback(context: dict[str, Any], evaluator_type: str, feedback: EvaluationFeedback) -> dict[str, Any]:
-    """Store one evaluator result in the current section review bucket."""
+    """把单个 evaluator 结果写入当前章节的 review bucket。"""
     if feedback.evaluator_type != evaluator_type:
         feedback.evaluator_type = evaluator_type
     append_review(context, feedback)
@@ -62,7 +65,7 @@ async def capture_architect_output(
     context: dict[str, Any],
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Persist blueprint and initialize the execution contract."""
+    """保存 blueprint，并初始化执行期 contract。"""
     blueprint = _parse_agent_output(messages, agent, ManuscriptBlueprint)
     story = ResearchStory.model_validate(context["story"])
     active_sections = story.metadata.get("active_sections")
@@ -79,7 +82,7 @@ async def capture_section_writer_output(
     context: dict[str, Any],
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Persist the current section draft."""
+    """保存当前章节 draft。"""
     draft = _parse_agent_output(messages, agent, SectionDraft)
     save_section_draft(context, draft)
     return context
@@ -91,7 +94,7 @@ def _capture_feedback(
     context: dict[str, Any],
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Extract and store one evaluator output."""
+    """提取并保存一次 evaluator 输出。"""
     feedback = _parse_agent_output(messages, agent, EvaluationFeedback)
     return _store_feedback(context, evaluator_type, feedback)
 
@@ -102,7 +105,7 @@ async def capture_reasoning_feedback(
     context: dict[str, Any],
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Persist reasoning evaluator feedback."""
+    """保存 reasoning evaluator 的反馈。"""
     return _capture_feedback("reasoning", messages, context, agent)
 
 
@@ -112,7 +115,7 @@ async def capture_data_fidelity_feedback(
     context: dict[str, Any],
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Persist data fidelity evaluator feedback."""
+    """保存 data fidelity evaluator 的反馈。"""
     return _capture_feedback("data_fidelity", messages, context, agent)
 
 
@@ -122,7 +125,7 @@ async def capture_visual_feedback(
     context: dict[str, Any],
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Persist visual evaluator feedback."""
+    """保存 visual evaluator 的反馈。"""
     return _capture_feedback("visual", messages, context, agent)
 
 
@@ -132,7 +135,7 @@ async def apply_review_cycle(
     messages: list[dict[str, Any]] | None = None,
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Aggregate review state and advance workflow status."""
+    """聚合当前 review 状态，并推进工作流。"""
     del messages, agent
     apply_review_cycle_impl(context)
     refresh_prompt_views(context)
@@ -146,7 +149,7 @@ async def capture_refiner_output(
     context: dict[str, Any],
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Persist refiner output."""
+    """保存 refiner 输出。"""
     output = _parse_agent_output(messages, agent, RefinerOutput)
     store_refiner_output(context, output)
     return context
@@ -158,7 +161,7 @@ async def render_and_finalize(
     messages: list[dict[str, Any]] | None = None,
     agent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Render the final markdown / latex bundle."""
+    """渲染最终的 markdown / LaTeX 稿件。"""
     del messages, agent
     rendered = render_markdown_manuscript(context)
     store_render_output(context, rendered)

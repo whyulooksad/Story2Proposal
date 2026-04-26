@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Story2Proposal 的 contract 构建与更新逻辑。"""
+"""Story2Proposal 的 contract 构建与更新逻辑。
+
+这个模块负责把 blueprint 转成执行期 contract，并在运行过程中持续吸收 review 产生的结构化 patch。
+"""
 
 from copy import deepcopy
 from typing import Any

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""HTTP request and response models for the main Story2Proposal API."""
+"""Story2Proposal 主 API 的请求与响应模型。"""
 
 from pydantic import BaseModel, Field
 
@@ -9,14 +9,14 @@ from backend.schemas import ResearchStory
 
 
 class RunCreateRequest(BaseModel):
-    """Request body for creating a run."""
+    """创建 run 时使用的请求体。"""
 
     story: ResearchStory
     model: str = DEFAULT_MODEL
 
 
 class RunArtifactResponse(BaseModel):
-    """One run artifact returned to the frontend."""
+    """返回给前端的单个 run 产物。"""
 
     id: str
     label: str
@@ -25,7 +25,7 @@ class RunArtifactResponse(BaseModel):
 
 
 class SectionStateResponse(BaseModel):
-    """Section status summary used by the run detail page."""
+    """run 详情页使用的章节状态摘要。"""
 
     id: str
     title: str
@@ -34,7 +34,7 @@ class SectionStateResponse(BaseModel):
 
 
 class RunOverviewResponse(BaseModel):
-    """High-level run overview."""
+    """run 的高层概览信息。"""
 
     finalStatus: str
     contractState: str
@@ -46,7 +46,7 @@ class RunOverviewResponse(BaseModel):
 
 
 class RunReviewStateResponse(BaseModel):
-    """Structured state from the latest review cycle."""
+    """最新一轮 review 的结构化状态。"""
 
     status: str | None = None
     nextAction: str | None = None
@@ -56,7 +56,7 @@ class RunReviewStateResponse(BaseModel):
 
 
 class RunItemResponse(BaseModel):
-    """Lightweight run summary used in the run list."""
+    """run 列表使用的轻量摘要。"""
 
     id: str
     storyId: str
@@ -68,7 +68,7 @@ class RunItemResponse(BaseModel):
 
 
 class RunDetailResponse(RunItemResponse):
-    """Full run detail response."""
+    """单个 run 的完整详情响应。"""
 
     currentNode: str
     currentSectionId: str | None = None

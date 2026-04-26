@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Story2Proposal 应用层图构建。"""
+"""Story2Proposal 的应用层工作流图构建。
+
+这个文件负责装配业务节点之间的主控制流。
+"""
 
 from backend.src import Agent, Edge
 

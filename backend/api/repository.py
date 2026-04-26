@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-"""API-side story persistence and process-based run lifecycle management."""
+"""API 侧的 story 持久化与 run 生命周期管理。
+
+这个文件负责：
+
+- story 文件读写
+- run 子进程启动与停止
+- run 状态推断
+- 输出目录产物聚合
+"""
 
 import json
 import os
@@ -64,7 +72,7 @@ def _map_section_status(status: str) -> str:
 
 
 def _map_run_status(status: str | None) -> str:
-    """Map persisted final status values to frontend statuses."""
+    """把持久化的最终状态映射成前端使用的状态值。"""
     if status in {None, "", "running"}:
         return "running"
     if status == "rendered":
@@ -215,7 +223,10 @@ class ActiveRun:
 
 
 class StoryRepository:
+    """story 的文件持久化仓库。"""
+
     def list(self) -> list[ResearchStory]:
+        """列出全部 story，并按最近修改时间倒序返回。"""
         items: dict[str, tuple[float, ResearchStory]] = {}
         for path in STORIES_DIR.glob("*.json"):
             story = ResearchStory.from_path(path)
@@ -227,11 +238,13 @@ class StoryRepository:
         return [item[1] for item in ordered]
 
     def save(self, story: ResearchStory) -> ResearchStory:
+        """保存一份 story。"""
         path = STORIES_DIR / f"{story.story_id}.json"
         path.write_text(story.model_dump_json(indent=2), encoding="utf-8")
         return story
 
     def delete(self, story_id: str) -> None:
+        """删除一份 story。"""
         path = STORIES_DIR / f"{story_id}.json"
         if not path.exists():
             raise FileNotFoundError(story_id)
@@ -239,6 +252,8 @@ class StoryRepository:
 
 
 class RunRepository:
+    """run 的生命周期与产物管理仓库。"""
+
     def __init__(self) -> None:
         self._lock = Lock()
         self._active_runs: dict[str, ActiveRun] = {}
@@ -314,6 +329,7 @@ class RunRepository:
         return final_status
 
     def list(self) -> list[RunItemResponse]:
+        """列出当前可见的全部 runs。"""
         items: dict[str, RunItemResponse] = {}
 
         if OUTPUTS_DIR.exists():
@@ -374,6 +390,7 @@ class RunRepository:
         return sorted(items.values(), key=lambda item: item.updatedAt, reverse=True)
 
     def create(self, story: ResearchStory, model: str) -> RunDetailResponse:
+        """创建一个新的 run，并立即启动对应子进程。"""
         timestamp = datetime.now()
         run_id = f"{story.story_id}_{timestamp.strftime('%Y%m%d_%H%M%S')}"
         output_dir = OUTPUTS_DIR / run_id
@@ -403,6 +420,7 @@ class RunRepository:
         return self.get(run_id)
 
     def stop(self, run_id: str) -> RunDetailResponse:
+        """停止一个正在运行的 run。"""
         with self._lock:
             active = self._active_runs.get(run_id)
         if active is None:
@@ -433,6 +451,7 @@ class RunRepository:
         return self.get(run_id)
 
     def delete(self, run_id: str) -> None:
+        """删除一个已停止的 run 及其输出目录。"""
         output_dir = OUTPUTS_DIR / run_id
         with self._lock:
             active = self._active_runs.get(run_id)
@@ -446,6 +465,7 @@ class RunRepository:
             self._active_runs.pop(run_id, None)
 
     def resolve_file(self, run_id: str, file_path: str) -> Path:
+        """把 run 内文件路径解析为安全的真实路径。"""
         output_dir = OUTPUTS_DIR / run_id
         if not output_dir.exists():
             raise FileNotFoundError(run_id)
@@ -461,6 +481,7 @@ class RunRepository:
         return normalized
 
     def get(self, run_id: str) -> RunDetailResponse:
+        """返回单个 run 的完整详情。"""
         output_dir = OUTPUTS_DIR / run_id
         with self._lock:
             active = self._active_runs.get(run_id)
@@ -545,6 +566,7 @@ class RunRepository:
         )
 
     def _build_artifacts(self, output_dir: Path) -> list[RunArtifactResponse]:
+        """把输出目录中的主要产物组装成 API 返回结构。"""
         artifacts: list[RunArtifactResponse] = []
         single_files = [
             ("blueprint", "Blueprint", output_dir / "blueprint.json"),

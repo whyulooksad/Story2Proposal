@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Story2Proposal 的章节评审循环辅助函数。"""
+"""Story2Proposal 的章节评审循环辅助函数。
+
+这个模块负责聚合章节评审结果，并据此推进或回退章节循环。
+"""
 
 from pathlib import Path
 from typing import Any

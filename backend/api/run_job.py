@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Subprocess entrypoint for a single Story2Proposal run."""
+"""单次 Story2Proposal run 的子进程入口。
+
+这个文件负责在独立子进程中执行一次完整 run，并在失败时写出错误日志。
+"""
 
 import argparse
 import json
@@ -13,10 +16,12 @@ from backend.schemas import ResearchStory
 
 
 def _write_json(path: Path, payload: object) -> None:
+    """把对象写成格式化 JSON 文件。"""
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def main() -> int:
+    """解析参数并执行一次单次 run。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--story", required=True)
     parser.add_argument("--output-dir", required=True)

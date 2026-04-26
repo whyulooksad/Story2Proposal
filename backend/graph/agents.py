@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Story2Proposal agent definitions."""
+"""Story2Proposal 的业务 Agent 构造逻辑。
+
+这个文件负责为工作流中的各个业务节点绑定 prompt、hook 和可选的 MCP 配置。
+"""
 
 from backend.src import Agent, Hook
 
@@ -8,7 +11,7 @@ from backend.config import load_mcp_server, load_prompt
 
 
 def _required_mcp_server_config(name: str) -> dict[str, object]:
-    """Return one required MCP server config from repo-local `.mcp.json`."""
+    """从仓库本地 `.mcp.json` 中读取一个必需的 MCP server 配置。"""
     config = load_mcp_server(name)
     if config is None:
         raise RuntimeError(f"Missing MCP server config {name!r} in .mcp.json")
@@ -16,12 +19,12 @@ def _required_mcp_server_config(name: str) -> dict[str, object]:
 
 
 def drawio_server_config() -> dict[str, object] | None:
-    """Return draw.io MCP config from repo-local `.mcp.json`."""
+    """返回 draw.io MCP 的配置。"""
     return load_mcp_server("drawio")
 
 
 def workflow_server_config() -> dict[str, object]:
-    """Return workflow MCP config from repo-local `.mcp.json`."""
+    """返回 workflow MCP 的配置。"""
     return _required_mcp_server_config("s2p_workflow")
 
 
@@ -34,7 +37,7 @@ def _make_agent(
     on_end: str | None = None,
     mcp_servers: dict[str, object] | None = None,
 ) -> Agent:
-    """Construct one application-layer agent with shared conventions."""
+    """按统一约定构造一个应用层 Agent。"""
     hooks: list[Hook] = []
     if on_start is not None or on_end is not None:
         hooks.append(Hook(on_start=on_start, on_end=on_end))
@@ -48,7 +51,7 @@ def _make_agent(
 
 
 def build_agents(model: str) -> dict[str, Agent]:
-    """Build all static agents used in the Story2Proposal workflow."""
+    """构造 Story2Proposal 工作流中使用的全部静态 Agent。"""
     drawio_config = drawio_server_config()
     return {
         "architect": _make_agent(

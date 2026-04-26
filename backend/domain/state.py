@@ -2,8 +2,12 @@ from __future__ import annotations
 
 """Story2Proposal 的共享状态辅助函数。
 
-这个模块负责定义应用层共享 `context` 的基本形状，刷新给 prompt
-直接使用的投影视图，并把中间产物与最终产物落盘。
+这个模块负责维护应用层共享 `context`，并提供：
+
+- 初始状态构造
+- prompt 视图刷新
+- 中间产物回写
+- 运行快照落盘
 """
 
 import json
