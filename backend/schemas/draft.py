@@ -2,8 +2,8 @@ from __future__ import annotations
 
 """Story2Proposal 的写作产物模型。
 
-这一层承载 section writer、refiner 和 renderer 的结构化输出，
-让 review、render 和持久化逻辑都围绕同一套对象工作。
+这一层定义章节草稿、全局重写结果和最终渲染产物，让写作、评审、渲染
+和持久化逻辑都围绕同一套结构化对象工作。
 """
 
 from typing import Any

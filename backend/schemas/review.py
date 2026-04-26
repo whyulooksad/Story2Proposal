@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Story2Proposal 的评审反馈模型。"""
+"""Story2Proposal 的评审反馈模型。
+
+这一层定义 evaluator 与 review_controller 之间传递的结构化反馈对象。
+"""
 
 from typing import Any, Literal
 

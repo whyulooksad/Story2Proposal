@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Story2Proposal 的评测与 benchmark 协议模型。"""
+"""Story2Proposal 的评测与 benchmark 协议模型。
+
+这一层定义最终稿件评测、候选稿件对比和 benchmark 汇总所需的结构化对象。
+"""
 
 from typing import Literal
 

@@ -2,12 +2,9 @@ from __future__ import annotations
 
 """Story2Proposal 的执行期 contract 模型。
 
-这一层不只是保存“章节有哪些要求”，而是显式表达论文里强调的：
-- 全局 visual registry
-- section-level obligations
-- document-wide validation rules
-- revision memory
-- claim / evidence / citation / visual 的可追踪关系
+这一层定义写作阶段真正围绕的约束对象。它不只描述章节要求，还显式维护
+claim、evidence、citation、visual、validation rule 和 revision log
+之间的可追踪关系。
 """
 
 from datetime import datetime, timezone
