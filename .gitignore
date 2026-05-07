@@ -1,5 +1,6 @@
 .env
 .mcp.json
+.claude/
 .idea/
 .playwright-mcp/
 .pycache_check/
